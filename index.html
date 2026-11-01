@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>光影工作志</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Karla:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+
+<!-- 桌面挂件手柄：拖拽 + 实时时钟 + 穿透 / 展开 / 隐藏 / 退出 / 设置（唯一控制栏） -->
+<div class="w-handle" id="w-handle">
+  <span class="w-grip" aria-hidden="true">⠿</span>
+  <span class="w-brand">光影工作志</span>
+  <span class="w-clock" id="w-clock">--:--</span>
+  <button class="w-btn" id="w-ct" type="button" title="鼠标穿透（闲置时仅手柄可拖）" aria-pressed="true" aria-label="切换鼠标穿透">👁</button>
+  <button class="w-btn" id="w-expand" type="button" title="展开 / 收起面板" aria-pressed="false" aria-label="展开或收起面板">▣</button>
+  <button class="w-btn" id="w-hide" type="button" title="隐藏到托盘" aria-label="隐藏到托盘">—</button>
+  <button class="w-btn" id="w-quit" type="button" title="退出应用" aria-label="退出应用">✕</button>
+  <button class="w-btn" id="w-sync" type="button" title="账号与同步" aria-label="账号与同步">☁</button>
+  <button class="w-btn" id="w-settings" type="button" title="设置" aria-label="设置">⚙</button>
+</div>
+
+<!-- 任务优先：随手记一笔置于顶部（收起/展开都在，主要动作第一眼可见） -->
+<div class="w-compose">
+  <form class="quickadd" id="quickadd" autocomplete="off">
+    <label class="qa-label" for="qa-title">✎ 随手记一笔</label>
+    <div class="qa-row">
+      <input class="qa-input" id="qa-title" type="text" maxlength="160" placeholder="今天要记得…" />
+      <button class="btn-add" type="submit">记下</button>
+    </div>
+    <div class="qa-controls">
+      <select id="qa-category" class="sel" aria-label="分类"></select>
+      <input id="qa-date" class="date-input" type="date" aria-label="截止日期" />
+    </div>
+    <div class="qa-controls qa-controls-end">
+      <div class="segmented" id="qa-priority" role="group" aria-label="优先级">
+        <button type="button" data-p="high" aria-pressed="false">高</button>
+        <button type="button" data-p="mid" aria-pressed="true">中</button>
+        <button type="button" data-p="low" aria-pressed="false">低</button>
+      </div>
+      <span class="qa-hint">截止日可留空</span>
+    </div>
+  </form>
+</div>
+
+<!-- 挂件主区：任务列表在前，周导航降级到底部细条 -->
+<div class="w-body" id="w-body">
+  <div class="w-today">
+    <div class="w-today-h"><span id="w-todayLabel">今日任务</span> <span id="w-todayCount"></span></div>
+    <div class="w-tlist" id="w-tlist"></div>
+  </div>
+  <div class="w-cal" id="w-cal">
+    <div class="w-calnav">
+      <button class="w-nav" id="w-prev" type="button" aria-label="上个月">‹</button>
+      <span id="w-calTitle">—</span>
+      <button class="w-nav" id="w-next" type="button" aria-label="下个月">›</button>
+      <button class="w-nav w-today-btn" id="w-today" type="button" aria-label="回到今天">今天</button>
+    </div>
+    <div class="w-weekrow" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+    <div class="w-grid" id="w-cal-grid"></div>
+  </div>
+</div>
+
+<!-- 折叠面板：原三 Tab 视图 -->
+<div id="w-panel" class="w-panel" hidden>
+
+<!-- 三个视图的切换 -->
+<nav class="tabs" role="tablist" aria-label="视图切换">
+  <button class="tab" type="button" role="tab" id="tab-task" data-tab="task" aria-selected="true" aria-controls="view-task">任务</button>
+  <button class="tab" type="button" role="tab" id="tab-daily" data-tab="daily" aria-selected="false" aria-controls="view-daily" tabindex="-1">日报</button>
+  <button class="tab" type="button" role="tab" id="tab-weekly" data-tab="weekly" aria-selected="false" aria-controls="view-weekly" tabindex="-1">周报</button>
+</nav>
+
+<main class="app-main" id="app-main">
+
+  <!-- ===== Tab 1 · 任务 ===== -->
+  <section class="view" id="view-task" role="tabpanel" aria-labelledby="tab-task">
+
+    <div class="filter-bar" id="filter-bar" hidden>
+      <span class="filter-chip">
+        <span id="filter-text">筛选</span>
+        <button type="button" id="filter-clear" aria-label="清除日期筛选">✕</button>
+      </span>
+    </div>
+
+    <div class="task-groups reveal" id="task-groups" style="--d:.12s"></div>
+
+  </section>
+
+  <!-- ===== Tab 2 · 日报 ===== -->
+  <section class="view" id="view-daily" role="tabpanel" aria-labelledby="tab-daily" hidden>
+
+    <div class="date-nav reveal" style="--d:.04s">
+      <button class="icon-btn sm" id="daily-prev" type="button" aria-label="前一天">‹</button>
+      <div class="date-nav-label" id="daily-label">—</div>
+      <button class="icon-btn sm" id="daily-next" type="button" aria-label="后一天">›</button>
+      <button class="btn-ghost" id="daily-today" type="button">今天</button>
+    </div>
+
+    <section class="card reveal" aria-labelledby="daily-sum-title" style="--d:.1s">
+      <h2 class="card-title" id="daily-sum-title">今日完成 <span class="count-badge" id="daily-total">0</span></h2>
+      <div class="summary" id="daily-summary"></div>
+    </section>
+
+    <section class="card ai-card reveal" aria-labelledby="daily-ai-title" style="--d:.13s">
+      <h2 class="card-title" id="daily-ai-title">智能摘要 <span class="ai-tag">自动生成</span></h2>
+      <p class="ai-text" id="daily-ai">—</p>
+    </section>
+
+    <div class="field reveal" style="--d:.16s">
+      <label for="daily-progress">今日进展</label>
+      <textarea id="daily-progress" rows="4" placeholder="做了什么，推进到哪一步…"></textarea>
+    </div>
+
+    <div class="field reveal" style="--d:.22s">
+      <label for="daily-issues">问题与风险</label>
+      <textarea id="daily-issues" rows="3" placeholder="卡在哪里，需要谁配合…"></textarea>
+    </div>
+
+    <div class="field reveal" style="--d:.28s">
+      <label for="daily-plan">明日计划</label>
+      <textarea id="daily-plan" rows="3" placeholder="明天先做哪几件…"></textarea>
+    </div>
+
+    <div class="foot reveal" style="--d:.34s">
+      <span class="save-hint" id="daily-hint">输入后自动保存</span>
+      <button class="btn-primary" id="daily-copy" type="button">一键复制日报</button>
+    </div>
+
+  </section>
+
+  <!-- ===== Tab 3 · 周报 ===== -->
+  <section class="view" id="view-weekly" role="tabpanel" aria-labelledby="tab-weekly" hidden>
+
+    <div class="date-nav reveal" style="--d:.04s">
+      <button class="icon-btn sm" id="weekly-prev" type="button" aria-label="上一周">‹</button>
+      <div class="date-nav-label" id="weekly-label">—</div>
+      <button class="icon-btn sm" id="weekly-next" type="button" aria-label="下一周">›</button>
+      <button class="btn-ghost" id="weekly-this" type="button">本周</button>
+    </div>
+
+    <section class="card reveal" aria-labelledby="weekly-done-title" style="--d:.1s">
+      <h2 class="card-title" id="weekly-done-title">本周完成 <span class="count-badge" id="weekly-total">0</span></h2>
+      <div id="weekly-completed"></div>
+    </section>
+
+    <section class="card reveal" aria-labelledby="weekly-progress-title" style="--d:.16s">
+      <h2 class="card-title" id="weekly-progress-title">本周进展</h2>
+      <div id="weekly-progress"></div>
+    </section>
+
+    <section class="card reveal" aria-labelledby="weekly-issues-title" style="--d:.22s">
+      <h2 class="card-title" id="weekly-issues-title">问题与风险</h2>
+      <div id="weekly-issues"></div>
+    </section>
+
+    <div class="field reveal" style="--d:.28s">
+      <label for="weekly-plan">下周计划</label>
+      <textarea id="weekly-plan" rows="4" placeholder="下周先做什么…"></textarea>
+    </div>
+
+    <section class="card reveal" aria-labelledby="weekly-ov-title" style="--d:.34s">
+      <h2 class="card-title" id="weekly-ov-title">数据概览</h2>
+      <div id="weekly-overview"></div>
+    </section>
+
+    <section class="card ai-card reveal" aria-labelledby="weekly-ai-title" style="--d:.37s">
+      <h2 class="card-title" id="weekly-ai-title">智能摘要 <span class="ai-tag">自动生成</span></h2>
+      <p class="ai-text" id="weekly-ai">—</p>
+    </section>
+
+    <div class="foot reveal" style="--d:.4s">
+      <span class="save-hint" id="weekly-hint">计划改动自动保存</span>
+      <button class="btn-primary" id="weekly-copy" type="button">一键复制周报</button>
+    </div>
+
+  </section>
+
+  <!-- 展开态：月历常驻面板底部，不随 Tab 隐藏 -->
+  <div id="panel-cal-slot" class="panel-cal-slot"></div>
+
+</main>
+</div><!-- /w-panel -->
+
+<!-- ===== 设置 ===== -->
+<div class="modal" id="settings-modal" hidden>
+  <div class="modal-backdrop" id="settings-backdrop"></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <header class="modal-head">
+      <h2 id="settings-title">设置</h2>
+      <button class="icon-btn sm" id="settings-close" type="button" aria-label="关闭设置">✕</button>
+    </header>
+    <div class="modal-body">
+
+      <section class="set-block">
+        <h3>分类管理</h3>
+        <div class="chips" id="cat-chips"></div>
+        <div class="cat-add">
+          <input id="cat-input" type="text" maxlength="20" placeholder="新分类名，如「光影集」" aria-label="新分类名" />
+          <button class="btn-mini" id="cat-add" type="button">添加</button>
+        </div>
+      </section>
+
+      <section class="set-block">
+        <h3>提醒</h3>
+        <div class="set-row">
+          <span class="lbl">日报提醒</span>
+          <input type="time" id="set-daily-at" class="time-mini" aria-label="日报提醒时间" />
+          <input type="checkbox" class="switch" id="set-daily-enabled" aria-label="启用日报提醒" />
+        </div>
+        <div class="set-row">
+          <span class="lbl">到期提醒</span>
+          <input type="time" id="set-due-at" class="time-mini" aria-label="到期提醒时间" />
+          <input type="checkbox" class="switch" id="set-due-enabled" aria-label="启用到期提醒" />
+        </div>
+      </section>
+
+      <section class="set-block">
+        <h3>常驻</h3>
+        <div class="set-row">
+          <span class="lbl">开机自启</span>
+          <input type="checkbox" class="switch" id="set-launch" aria-label="开机自启" />
+        </div>
+        <div class="set-row">
+          <span class="lbl">关闭窗口时收到托盘</span>
+          <input type="checkbox" class="switch" id="set-tray" aria-label="关闭窗口时收到托盘" />
+        </div>
+        <div class="set-row">
+          <span class="lbl">速记快捷键</span>
+          <input type="text" id="set-hotkey" spellcheck="false" aria-label="速记快捷键，如 Ctrl+Shift+Space" />
+        </div>
+        <div class="set-row">
+          <span class="lbl">挂件位置</span>
+          <button class="btn-mini" id="set-reset-pos" type="button">复位到屏幕中心</button>
+        </div>
+        <p class="set-tip">改完按回车生效；若组合键无效或被占用，会自动退回 Ctrl+Shift+Space。</p>
+      </section>
+
+      <section class="set-block" id="acc-block">
+        <h3>账号与同步</h3>
+        <div class="set-row">
+          <span class="lbl">服务器地址</span>
+          <input type="url" id="acc-server" class="text-input" placeholder="https://sync.example.com" aria-label="同步服务器地址" />
+        </div>
+        <p id="acc-status" class="set-tip">未登录</p>
+
+        <div id="acc-form">
+          <div class="set-row">
+            <span class="lbl">邮箱</span>
+            <input type="email" id="acc-email" class="text-input" placeholder="you@example.com" aria-label="邮箱" />
+          </div>
+          <div class="set-row">
+            <span class="lbl">密码</span>
+            <input type="password" id="acc-password" class="text-input" placeholder="至少 6 位" aria-label="密码" />
+          </div>
+          <div class="set-row" id="acc-confirm-row">
+            <span class="lbl">确认密码</span>
+            <input type="password" id="acc-confirm" class="text-input" placeholder="再次输入密码" aria-label="确认密码" />
+          </div>
+          <div class="acc-actions">
+            <button class="btn-mini primary" id="acc-submit" type="button">登录</button>
+            <button class="btn-link" id="acc-toggle" type="button">没有账号？注册</button>
+          </div>
+          <div class="acc-actions">
+            <button class="btn-link" id="acc-forgot" type="button">忘记密码</button>
+          </div>
+        </div>
+
+        <div class="acc-actions" id="acc-logout-row" hidden>
+          <button class="btn-mini" id="acc-logout" type="button">退出登录</button>
+        </div>
+        <p class="set-tip">登录后，任务 / 日报 / 偏好会自动增量同步到云端；断网照常用，恢复网络后自动补同步。</p>
+      </section>
+
+      <button class="btn-quit" id="btn-quit" type="button">退出应用</button>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- ===== 任务详情编辑 ===== -->
+<div class="modal" id="task-editor" hidden>
+  <div class="modal-backdrop" id="te-backdrop"></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="te-title-label">
+    <header class="modal-head">
+      <h2>任务详情</h2>
+      <button class="icon-btn sm" id="te-close" type="button" aria-label="关闭">✕</button>
+    </header>
+    <div class="modal-body">
+      <label class="fld-label" for="te-title">标题</label>
+      <input id="te-title" type="text" maxlength="160" />
+
+      <div class="te-row">
+        <div class="te-col">
+          <label class="fld-label" for="te-category">分类</label>
+          <select id="te-category"></select>
+        </div>
+        <div class="te-col">
+          <label class="fld-label" for="te-priority">优先级</label>
+          <select id="te-priority">
+            <option value="high">高</option>
+            <option value="mid">中</option>
+            <option value="low">低</option>
+          </select>
+        </div>
+        <div class="te-col">
+          <label class="fld-label" for="te-date">截止日</label>
+          <input id="te-date" type="date" />
+        </div>
+      </div>
+
+      <label class="fld-label" for="te-details">详细信息 <span class="fld-hint">（换行自动加 · ）</span></label>
+      <textarea id="te-details" rows="6" placeholder="· 关键点一&#10;· 关键点二"></textarea>
+
+      <div class="modal-foot">
+        <button class="btn-mini danger" id="te-delete" type="button">删除</button>
+        <span class="spacer"></span>
+        <button class="btn-mini ghost" id="te-cancel" type="button">取消</button>
+        <button class="btn-mini" id="te-save" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="src/editor.js"></script>
+<script src="src/taskModel.js"></script>
+<script src="src/report.js"></script>
+<script src="src/renderer.js"></script>
+</body>
+</html>

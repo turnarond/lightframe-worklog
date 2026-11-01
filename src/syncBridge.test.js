@@ -130,3 +130,32 @@ test('prefs LWW 回归: 远端较新的偏好在 pull 时被采纳', async () =>
   const s = await settingsStore.load();
   assert.deepEqual(s.categories, ['云端'], '远端较新偏好应被 pull 采纳（修复前会被本机值覆盖）');
 });
+
+test('seedIfFirstSync: 首次登录清空游标并全量推送，之后不再 seed（Task 11）', async () => {
+  const dir = tmpDir();
+  const tasksStore = Store.createTaskStore(path.join(dir, 'tasks.json'));
+  await tasksStore.save([{ id: 'a', title: 'x', updatedAt: 50, deletedAt: null }]);
+  let pushBody = null;
+  const fetchImpl = async function (method, url, body) {
+    if (method === 'GET' && url.indexOf('/pull') >= 0) {
+      return { ok: true, status: 200, json: { server_time: 100, changes: [] } };
+    }
+    if (method === 'POST' && url.indexOf('/push') >= 0) { pushBody = body; return { ok: true, status: 200, json: { server_time: 100 } }; }
+    return { ok: true, status: 200, json: {} };
+  };
+  const bridge = SB.createSyncBridge({
+    tasksStore: tasksStore,
+    logsStore: Store.createLogStore(path.join(dir, 'logs.json')),
+    settingsStore: Store.createSettingsStore(path.join(dir, 'settings.json')),
+    syncMetaStore: Store.createSyncMetaStore(path.join(dir, 'meta.json')),
+    fetchImpl: fetchImpl
+  });
+  const first = await bridge.seedIfFirstSync();
+  assert.equal(first, true, '首次应触发 seed');
+  assert.ok(pushBody, '应推送本地数据');
+  assert.equal(pushBody.changes[0].id, 'a', '全量推送包含本地任务');
+  const meta = await bridge.engine.getMeta();
+  assert.equal(meta.tasks.pushCursor, 100, '推送后游标推进');
+  const second = await bridge.seedIfFirstSync();
+  assert.equal(second, false, '已同步过，不再 seed');
+});

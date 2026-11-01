@@ -19,6 +19,7 @@ const {
 const { createTaskStore, createLogStore, createSettingsStore, createSyncMetaStore, DEFAULT_SETTINGS } =
   require('./src/store.js');
 const { createSyncBridge } = require('./src/syncBridge.js');
+const AuthClient = require('./src/authClient.js');
 
 const APP_ID = 'com.lightframe.worklog';
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
@@ -414,6 +415,60 @@ function registerIpc() {
     applyAllSettings();
     if (syncBridge) syncBridge.markDirty('prefs');
     return settings;
+  });
+
+  // ---------- 账号 / 同步（v3.0） ----------
+  function serverUrlFrom(payload) {
+    return (payload && payload.serverUrl) || settings.serverUrl || '';
+  }
+  async function loginFlow(kind, payload) {
+    const serverUrl = serverUrlFrom(payload);
+    if (!serverUrl) return { ok: false, error: '请先在设置中填写服务器地址' };
+    try {
+      const result = kind === 'register'
+        ? await AuthClient.register(serverUrl, payload.email, payload.password)
+        : await AuthClient.login(serverUrl, payload.email, payload.password);
+      settings.account = { email: result.email, token: result.token };
+      settings.serverUrl = serverUrl;
+      await persistSettings();
+      if (syncBridge) {
+        syncBridge.setAuth(serverUrl, result.token);
+        try { await syncBridge.seedIfFirstSync(); } catch (e) { console.warn('[auth] 首次同步失败：', e && e.message); }
+      }
+      return { ok: true, email: result.email };
+    } catch (err) {
+      return { ok: false, error: (err && err.message) || '操作失败' };
+    }
+  }
+
+  ipcMain.handle('auth:login', function (_event, payload) { return loginFlow('login', payload); });
+  ipcMain.handle('auth:register', function (_event, payload) { return loginFlow('register', payload); });
+
+  ipcMain.handle('auth:forgot', async function (_event, payload) {
+    const serverUrl = serverUrlFrom(payload);
+    if (!serverUrl) return { ok: false, error: '请先填写服务器地址' };
+    try {
+      await AuthClient.forgot(serverUrl, payload && payload.email);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err && err.message) || '请求失败' };
+    }
+  });
+
+  ipcMain.handle('auth:logout', async function () {
+    settings.account = null;
+    await persistSettings();
+    if (syncBridge) syncBridge.setAuth('', null);
+    return { ok: true };
+  });
+
+  ipcMain.handle('auth:status', function () {
+    const loggedIn = !!(settings.account && settings.account.token);
+    return {
+      loggedIn: loggedIn,
+      email: loggedIn ? settings.account.email : null,
+      serverUrl: settings.serverUrl || ''
+    };
   });
 
   ipcMain.handle('app:copy', function (_event, text) {

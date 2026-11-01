@@ -104,10 +104,30 @@ function createSyncBridge(opts) {
     engine.setToken(token);
   }
 
+  // 是否已「从未同步过」：所有类型的游标都还是 0
+  async function isNeverSynced() {
+    const meta = await getMeta();
+    return Sync.TYPES.every(function (t) {
+      const m = meta[t];
+      return !m || (!m.lastPull && !m.pushCursor);
+    });
+  }
+
+  // 首次登录：清空游标让全量本地数据被推送，再拉一次云端（获取已有数据）
+  async function seedIfFirstSync() {
+    if (!(await isNeverSynced())) return false;
+    const meta = await getMeta();
+    Sync.TYPES.forEach(function (t) { meta[t] = { lastPull: 0, pushCursor: 0 }; });
+    await setMeta(meta);
+    await engine.syncNow();
+    return true;
+  }
+
   return {
     engine: engine,
     markDirty: markDirty,
     setAuth: setAuth,
+    seedIfFirstSync: seedIfFirstSync,
     syncNow: function () { return engine.syncNow(); },
     onOnline: function () { return engine.onOnline(); }
   };
