@@ -11,10 +11,13 @@ function toMs(v) {
   return 0;
 }
 
-// 行的唯一键：任务/日志用 id，偏好用 key
+// 行的唯一键：任务用 id，偏好用 key，日志用 date
 function rowKey(r) {
   if (!r) return null;
-  return r.id != null ? String(r.id) : (r.key != null ? String(r.key) : null);
+  if (r.id != null) return String(r.id);
+  if (r.key != null) return String(r.key);
+  if (r.date != null) return String(r.date);
+  return null;
 }
 
 /**
