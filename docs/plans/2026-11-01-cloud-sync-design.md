@@ -1,0 +1,198 @@
+# 设计稿：v3.0 数据上云 + 用户管理
+
+- **日期**：2026-11-01
+- **目标版本**：3.0.0
+- **状态**：设计已与用户对齐（待实现）
+- **作者**：规划阶段（frontend-design / brainstorming 协作产出）
+
+## 0. 背景与目标
+
+当前「光影工作志」的数据全部落在本地 `userData` 下的三个 JSON 文件（`tasks.json` / `dailyLogs.json` / `settings.json`），由 `src/store.js` 的 `createTaskStore / createLogStore / createSettingsStore` 抽象。渲染层通过 IPC（`apiCall` / `bridge`）与主进程通信，业务层不直接碰文件。
+
+v3.0 目标：**让数据可云端同步，并引入用户账号体系**，使同一账号在「公司电脑 / 家里电脑 / 笔记本」多端一致。
+
+已确认的战略决策（按头脑风暴逐条对齐）：
+
+1. **后端**：自建，语言 **Golang**，部署在 **阿里云**。
+2. **账号**：**邮箱 + 密码 + JWT**（找回走邮箱验证链接）。
+3. **同步策略**：**离线优先 + 增量同步 + 按记录 LWW**（最后写入获胜）。
+4. **数据库**：**PostgreSQL**（阿里云 RDS / PolarDB 入门规格）。
+5. **同步范围**：**内容上云，设备本地专属项除外**（挂件坐标 / 透明度 / 穿透等不传）。
+
+---
+
+## 1. 总体架构
+
+```
+┌─ Electron 客户端（现有 store 抽象不变）─────────────┐
+│  tasks.json / dailyLogs.json（内容）  ← 仍作本地缓存 │
+│  settings.json（仅本机项：rect/opacity/穿透）        │
+│         ↑↓  SyncEngine（新增：脏标记 + 增量拉推）     │
+└──────────────────┬──────────────────────────────────┘
+                   │ HTTPS + JWT
+┌──────────────────▼──────────────────────────────────┐
+│  Go 后端（阿里云 ECS / 函数计算，单二进制）          │
+│  /api/auth/*   注册 / 登录 / 找回密码（JWT 签发）     │
+│  /api/sync/pull?since=…   增量拉取                   │
+│  /api/sync/push          批量 upsert + 软删           │
+│  Postgres：users / tasks / daily_logs / prefs         │
+└───────────────────────────────────────────────────────┘
+```
+
+- **本地 store 不动**：`createTaskStore/createLogStore` 继续写本地 JSON，UI 完全无感；新增 `SyncEngine` 在后台做「脏标记 → 增量拉/推」，断网照常工作。
+- **服务端为权威**：每条内容行带 `user_id` + `updated_at` + `deleted_at`（软删，便于同步删除）。
+- **同步协议**：客户端记录每类数据的 `last_sync` 游标；`pull` 只取 `updated_at > since`（含近期软删）；`push` 上报本地脏行，服务端按 `updated_at` 做 LWW 合并后回写最新版本。
+- **安全**：密码 `argon2id` 哈希；JWT 短时效 + 刷新；全链路 HTTPS（阿里云证书）；auth 接口限流。
+
+---
+
+## 2. 数据表结构
+
+后端用 **Postgres**，核心原则：**每条内容行都带 `user_id` + 客户端生成的 `id`(UUID) + `updated_at` + `deleted_at`**，以支持离线创建与增量 LWW。
+
+```sql
+users(
+  id            uuid PK,
+  email         text UNIQUE,
+  password_hash text,            -- argon2id
+  display_name  text,
+  email_verified bool DEFAULT false,
+  reset_token_hash text,         -- 找回密码令牌哈希
+  reset_expires_at timestamptz,
+  created_at    timestamptz DEFAULT now()
+)
+
+tasks(
+  id          uuid PK,
+  user_id     uuid FK,
+  title       text,
+  category    text,
+  priority    text,              -- high/mid/low
+  due_date    date,
+  done        bool DEFAULT false,
+  note        text,
+  created_at  timestamptz,
+  updated_at  timestamptz,       -- LWW 比较字段（UTC ms）
+  deleted_at  timestamptz        -- 软删；NULL=未删
+)
+
+daily_logs(
+  id          uuid PK,
+  user_id     uuid FK,
+  log_date    date,              -- 日报所属日期
+  content     text,
+  summary     text,
+  created_at  timestamptz,
+  updated_at  timestamptz,
+  deleted_at  timestamptz
+)
+
+prefs(
+  user_id     uuid FK,
+  key         text,
+  value       text,
+  updated_at  timestamptz,
+  deleted_at  timestamptz,
+  PRIMARY KEY (user_id, key)     -- 分类列表、默认优先级等偏好
+)
+```
+
+**关键决策**
+- **`id` 由客户端生成 UUID**：离线新建任务时本地即可拿到稳定主键，恢复网络后直接 `push`，不依赖服务端发号，也避免双端碰撞。
+- **软删 `deleted_at`**：删除也走同步（`pull` 下发 `deleted_at > since` 的行，客户端本地标记删除），避免「A 删了、B 没收到」导致复活。
+- **周报不单独存**：日报 `daily_logs` 已覆盖每日，周报在客户端按周聚合派生（YAGNI，省一张表）。
+- **本机专属不入云**：挂件坐标 / 透明度 / 穿透留在本地 `settings.json`，不进 `prefs`，避免换设备互相覆盖。
+- **`updated_at` 统一 UTC 毫秒时间戳**，LWW 仅比较它，不依赖客户端时钟绝对准确（够用）。
+
+---
+
+## 3. 同步协议细节
+
+### 3.1 API
+
+```
+POST /api/auth/register      {email, password, display_name?}
+                              → 201 {user, access_token, refresh_token}
+POST /api/auth/login         {email, password}
+                              → 200 {access_token, refresh_token}
+POST /api/auth/refresh       {refresh_token} → 200 {access_token}
+POST /api/auth/forgot-password {email}
+                              → 200（恒成功，避免邮箱枚举；真有账号才发信）
+POST /api/auth/reset-password  {token, new_password} → 200
+
+GET  /api/sync/pull?since=ISO8601&types=tasks,daily_logs,prefs
+                              → 200 {server_time, changes:[ {type, row...} ]}
+POST /api/sync/push          {changes:[ {type, id, fields..., updated_at, deleted_at} ]}
+                              → 200 {applied:[{id, updated_at}], conflicts:[{id, server_updated_at}]}
+```
+
+所有 `/api/sync/*` 需带 `Authorization: Bearer <access_token>`；`user_id` 由 token 解析，客户端不可伪造归属。
+
+### 3.2 报文约定
+
+- `changes` 中每条记录携带完整字段（含 `updated_at` / `deleted_at`）。
+- `pull` 的返回条件：`updated_at > since` **或** `deleted_at > since`（二者皆下发，客户端据此新增/更新/软删）。
+- `push` 的服务端 LWW 规则：
+  - 若行不存在 → 插入。
+  - 若 `incoming.updated_at > existing.updated_at` → 覆盖（含软删）。
+  - 否则 → 保留既有（返回 `conflicts` 供客户端知悉，但**不弹窗**，按既定策略静默以服务端为准）。
+
+### 3.3 客户端 SyncEngine 行为
+
+- **触发时机**：登录成功、应用启动、网络恢复（`online` 事件）、本地数据变更后（防抖 ~5s）、以及周期性保底（如每 30s）。
+- **拉取（pull）**：以每类 `last_sync` 为 `since` 调用；合并结果到本地 store（按 `id` upsert / 软删）；成功后把 `last_sync` 推进到 `server_time`。
+- **推送（push）**：收集本地 `updated_at > push_cursor` 的脏行（按类型）；`POST /api/sync/push`；成功后把 `push_cursor` 推进到本次 `server_time`。
+  - 已 `pull` 下来的行其 `updated_at` ≥ 本地，不会被判为脏，避免回环。
+  - 本地在 `pull` 之后、`push` 之前又被改动的行，`updated_at` 仍 > `push_cursor`，会正常上报。
+- **离线**：全部操作落本地 JSON，照常可用；联网后由上述触发自动补齐。网络失败用指数退避重试。
+- **脏标记的最小实现**：本地记录增加 `updated_at`（UTC ms，由客户端在 mutation 时写入）与每类型 `push_cursor`；无需额外 `dirty` 布尔，靠时间戳差分即可。
+
+### 3.4 首次登录 / 本地数据迁移
+
+- 用户此前只有本地数据（无账号）。**首次登录成功后，客户端把本地全部内容当作脏行 `push` 一次**，作为该账号的初始种子。
+- 若云端已存在同名账号的旧数据：默认 **「云端为准，本地合并进云端」**（LWW 自然处理同 `id` 冲突；本地多出的 `id` 直接新增）。
+- 进阶（可选，不在 v3.0 必须项）：首次登录弹一次「合并 / 以云端覆盖本地」选择。先按「合并」默认实现。
+
+### 3.5 安全与运维
+
+- **密码**：`argon2id`（内存/并行参数取保守档），不存明文。
+- **令牌**：access token 短效（如 15min，JWT HS256 或 EdDSA）+ refresh token（30d，可轮转、可吊销表）。
+- **传输**：全站 HTTPS（阿里云证书 / SLB 终止 TLS）。
+- **限流**：auth 接口按 IP + 账号维度限流（如 10 次/分），防爆破。
+- **邮箱**：找回密码用阿里云 DirectMail 或事务邮件服务；重置链接指向 `lightframe://reset?token=...` 自定义协议（桌面端直接拉起应用填空），或极简落地页。
+- **部署**：Go 编译为单静态二进制部署到阿里云 ECS（最便宜规格即可），数据库用阿里云 RDS PostgreSQL（或 PolarDB）；亦可后续迁函数计算。单实例 + 单 DB 连接池对 v3.0 个人/小团队够用。
+
+---
+
+## 4. 客户端改造范围（概览，非实现细节）
+
+| 模块 | 变更 |
+|---|---|
+| `src/store.js` | 内容 store 增加 `updated_at` 写入；新增每类型 `push_cursor` 持久化（可并入 `settings.json` 的同步区块） |
+| `src/renderer.js` | 新增 `SyncEngine` 模块（拉/推/冲突/重试）；所有 mutation 后标记脏（更新 `updated_at`）；登录/登出 UI 入口 |
+| `index.html` / `styles.css` | 新增「账号」入口（登录/注册/退出/同步状态指示）；设置面板加账号区块 |
+| `main.js` | 不变（同步走渲染层直连后端 HTTPS，不经主进程） |
+| `preload.js` | 不变（除非需要主进程代理网络，暂不） |
+
+> 注：本地 store 抽象保持不变，UI 层无感；主要新增在 `SyncEngine` 与账号 UI。
+
+---
+
+## 5. 验收口径（建议）
+
+- [ ] 同账号双端：A 端新建/编辑/删除任务，B 端在联网后一段时间内一致（含删除同步）。
+- [ ] 断网期间所有操作可用；恢复网络后自动补齐，无数据丢失。
+- [ ] 双端同时改同一条：以 `updated_at` 较新者为准，无弹窗、无重复。
+- [ ] 首次登录可把本地既有数据带入云端账号。
+- [ ] 挂件坐标 / 透明度 / 穿透等本机设置**不**随账号同步（换设备互不影响）。
+- [ ] 密码找回走邮箱链接可重置；错误口令被限流。
+- [ ] 无控制台报错；单测覆盖 `SyncEngine` 的 LWW / 脏差分 / 软删逻辑。
+
+---
+
+## 6. 待定 / 后续（YAGNI，v3.0 不做）
+
+- 多端实时协作（WebSocket 推送）——先用轮询/触发式拉取。
+- OAuth（微信/Google）——邮箱密码已满足。
+- 端到端加密（客户端加密后再上传）——v3.0 先明文存云，后续可加。
+- 团队成员/共享清单——超出个人工具范围。
