@@ -80,7 +80,8 @@
       createdAt: new Date().toISOString(),
       completedAt: null,
       completedOn: null,
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      deletedAt: null
     };
   }
 

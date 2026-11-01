@@ -78,7 +78,13 @@ function createTaskStore(filePath) {
     },
     async save(tasks) {
       const list = Array.isArray(tasks) ? tasks.map(function (item) {
-        return TaskModel.normalizeTask(item);
+        const t = TaskModel.normalizeTask(item);
+        if (!t) return null;
+        // 同步边界兜底：缺有效 updatedAt 的任务在保存时补时间戳，
+        // 否则 updatedAt=0 的任务在 SyncEngine 的 dirtyDiff 中永远不会被推送
+        if (!(t.updatedAt > 0)) t.updatedAt = Date.now();
+        if (t.deletedAt === null || t.deletedAt === undefined) t.deletedAt = null;
+        return t;
       }).filter(Boolean) : [];
       await writeJson(filePath, list);
     }

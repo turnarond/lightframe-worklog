@@ -188,11 +188,21 @@ test('设置 store: 旧文件缺字段时保留默认值（浅层 + 嵌套）', 
 
 const TM = require('./taskModel.js');
 
-test('createTask: 带数字毫秒 updatedAt', () => {
+test('createTask: 带数字毫秒 updatedAt + deletedAt:null', () => {
   const t = TM.createTask({ title: 'x' });
   assert.equal(typeof t.updatedAt, 'number');
   assert.ok(t.updatedAt > 0);
-  assert.equal(t.deletedAt, undefined);
+  assert.equal(t.deletedAt, null);
+});
+
+test('任务 store: save→load 产出数字 updatedAt 且默认 deletedAt:null（同步边界兜底）', async () => {
+  const file = path.join(tmpDir(), 'tasks.json');
+  const store = S.createTaskStore(file);
+  await store.save([{ title: 'x' }]);          // 不显式给 updatedAt
+  const [t] = await store.load();
+  assert.equal(typeof t.updatedAt, 'number');
+  assert.ok(t.updatedAt > 0, '缺省 updatedAt 在保存时被补上');
+  assert.equal(t.deletedAt, null);
 });
 
 test('normalizeTask: updatedAt 兼容 ISO，deletedAt 缺省为 null', () => {
@@ -211,7 +221,7 @@ test('deleteTask: 软删——保留对象并置数字 deletedAt', () => {
   assert.equal(out.length, 2, '不移除对象');
   assert.equal(out[0].id, id);
   assert.ok(typeof out[0].deletedAt === 'number' && out[0].deletedAt > 0);
-  assert.equal(list[0].deletedAt, undefined, '原数组不被改动');
+  assert.equal(list[0].deletedAt, null, '原数组不被改动');
 });
 
 test('SyncMeta store: 默认值 + 持久化往返', async () => {
