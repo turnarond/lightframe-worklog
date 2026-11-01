@@ -119,6 +119,8 @@ function createSyncBridge(opts) {
     const meta = await getMeta();
     Sync.TYPES.forEach(function (t) { meta[t] = { lastPull: 0, pushCursor: 0 }; });
     await setMeta(meta);
+    // 首次 seed 需把偏好也纳入推送：打上真实改动时间戳（否则 prefs updatedAt=0 会被 dirtyDiff 排除）
+    await recordPrefsTs();
     await engine.syncNow();
     return true;
   }

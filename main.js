@@ -578,6 +578,11 @@ async function bootstrap() {
     console.warn('[settings] 读取失败，使用默认值：', err && err.message);
     settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   }
+
+  // v3.0：若已登录过，恢复鉴权，使重启后的本地改动能继续自动同步
+  if (settings.account && settings.account.token && settings.serverUrl && syncBridge) {
+    syncBridge.setAuth(settings.serverUrl, settings.account.token);
+  }
   try {
     tasksCache = await stores.tasks.load();
   } catch (err) {

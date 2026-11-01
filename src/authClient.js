@@ -29,8 +29,9 @@ async function login(serverUrl, email, password, fetchImpl) {
   if (!password) throw new Error('请输入密码');
   const r = await postJSON(serverUrl, '/api/auth/login', { email: email, password: password }, fetchImpl);
   if (!r.ok) throw new Error((r.data && r.data.error) || '登录失败');
-  if (!r.data.token) throw new Error('服务端未返回令牌');
-  return { token: r.data.token, email: r.data.email || email };
+  var token = r.data.token || r.data.access_token;
+  if (!token) throw new Error('服务端未返回令牌');
+  return { token: token, email: r.data.email || email };
 }
 
 async function register(serverUrl, email, password, fetchImpl) {
@@ -38,8 +39,9 @@ async function register(serverUrl, email, password, fetchImpl) {
   if (!password || password.length < 6) throw new Error('密码至少 6 位');
   const r = await postJSON(serverUrl, '/api/auth/register', { email: email, password: password }, fetchImpl);
   if (!r.ok) throw new Error((r.data && r.data.error) || '注册失败');
-  if (!r.data.token) throw new Error('服务端未返回令牌');
-  return { token: r.data.token, email: r.data.email || email };
+  var token = r.data.token || r.data.access_token;
+  if (!token) throw new Error('服务端未返回令牌');
+  return { token: token, email: r.data.email || email };
 }
 
 async function forgot(serverUrl, email, fetchImpl) {

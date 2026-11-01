@@ -1490,7 +1490,11 @@
       'w-body', 'w-cal', 'panel-cal-slot', 'w-calTitle', 'w-prev', 'w-next', 'w-today', 'w-cal-grid', 'w-todayLabel',
       'w-todayCount', 'w-tlist', 'w-panel',
       'set-daily-enabled', 'set-daily-at', 'set-due-enabled', 'set-due-at',
-      'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'btn-quit', 'toast'
+      'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'btn-quit', 'toast',
+      'w-sync',
+      'acc-block', 'acc-server', 'acc-status', 'acc-form', 'acc-email', 'acc-password',
+      'acc-confirm', 'acc-confirm-row', 'acc-submit', 'acc-toggle', 'acc-forgot',
+      'acc-logout', 'acc-logout-row'
     ].forEach(function (id) {
       D[id] = $(id);
     });
