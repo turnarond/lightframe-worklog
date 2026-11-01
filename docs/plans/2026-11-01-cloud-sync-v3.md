@@ -1,0 +1,364 @@
+# v3.0 Cloud Sync Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** 给「光影工作志」加上邮箱/密码账号与云端同步，使同一账号在多个设备间任务/日报/偏好一致；离线可用，恢复网络后增量同步，冲突按记录级「最后写入获胜」。
+
+**Architecture:** 阿里云部署一个自研 Golang + Postgres 后端（auth + `/api/sync/pull|push`）；Electron 客户端保留现有本地 JSON store 抽象，新增 `src/sync.js` 的 `SyncEngine`，以每记录 `updated_at` 做增量拉/推与 LWW 合并；内容上云、挂件坐标/透明度/穿透等本机项不入云。
+
+**Tech Stack:** Go 1.22（`net/http` + `chi/v5` 路由 + `pgx/v5` 连接池 + `golang-jwt/jwt/v5` + `golang.org/x/crypto/argon2`）；Postgres（阿里云 RDS/PolarDB）；Electron/Node 客户端新增 `src/sync.js`（fetch + 纯函数 LWW，TDD 单测）；现有 `src/store.js` 扩展 `updatedAt`/`deletedAt` 与同步游标。
+
+---
+
+## 0. 准备：分支与目录
+
+**Step 1:** 从刚初始化的仓库开功能分支，避免污染 2.x 主线。
+
+```bash
+cd c:\Users\yanch\WorkBuddy\2026-10-31-22-45-57\task-desktop
+git checkout -b feat/v3.0-cloud
+```
+
+**Step 2:** 新建后端目录骨架（空提交占位，后续任务填充）。
+
+```
+server/
+  go.mod
+  main.go
+  internal/
+    db/        (pgx 连接池 + 迁移执行)
+    model/     (用户/任务/日志/偏好 行结构)
+    auth/      (argon2 + JWT)
+    api/       (http 处理器)
+    mail/      (Mailer 接口 + 开发/阿里云实现)
+  migrations/  (0001_init.sql ...)
+```
+
+**Step 3:** 提交骨架。
+
+```bash
+git add server; git commit -m "chore: v3.0 backend scaffold dirs"
+```
+
+---
+
+## 1. 后端模块与依赖
+
+**Files:** Create `server/go.mod`, `server/main.go`
+
+**Step 1 (写失败测试):** `server/internal/db/db_test.go` 暂留空，先验证 `go build ./...` 能跑通。
+
+**Step 2:** `server/go.mod`
+
+```go
+module lightframe/worklog-server
+
+go 1.22
+
+require (
+  github.com/go-chi/chi/v5 v5.0.12
+  github.com/jackc/pgx/v5 v5.5.5
+  github.com/golang-jwt/jwt/v5 v5.2.1
+  golang.org/x/crypto v0.21.0
+)
+```
+
+**Step 3:** 最小 `server/main.go`（仅打印），`go mod tidy` 后 `go build ./...` 通过。
+
+**Step 4:** 提交。`git commit -m "feat(server): init go module + chi/pgx deps"`
+
+---
+
+## 2. 数据库表与迁移执行器
+
+**Files:** Create `server/migrations/0001_init.sql`, `server/internal/db/db.go`
+
+**Step 1 (写失败测试):** `server/internal/db/db_test.go`
+
+```go
+func TestMigrateUpCreatesUsers(t *testing.T) {
+  pool := testPool(t)            // 从 env TEST_DATABASE_URL 建连，失败 t.Skip
+  if err := MigrateUp(pool); err != nil { t.Fatal(err) }
+  var n int
+  _ = pool.QueryRow(context.Background(), "select count(*) from users").Scan(&n)
+  if n != 0 { t.Fatalf("want 0 rows, got %d", n) }
+}
+```
+
+**Step 2:** `0001_init.sql`（与设计稿 §2 一致，含索引）。核心片段：
+
+```sql
+create table if not exists users(
+  id uuid primary key default gen_random_uuid(),
+  email text unique not null,
+  password_hash text not null,
+  display_name text,
+  email_verified boolean default false,
+  reset_token_hash text,
+  reset_expires_at timestamptz,
+  created_at timestamptz default now()
+);
+create table if not exists tasks(
+  id uuid primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  title text not null,
+  category text,
+  priority text,
+  due_date date,
+  done boolean default false,
+  note text,
+  created_at timestamptz default now(),
+  updated_at timestamptz not null,
+  deleted_at timestamptz
+);
+create index if not exists tasks_user_upd on tasks(user_id, updated_at);
+-- daily_logs / prefs 同构（见设计稿 §2），略
+```
+
+**Step 3:** `db.go` 实现 `MigrateUp(pool)`：按文件名顺序读取 `migrations/*.sql` 执行；`NewPool(url)` 返回 `*pgxpool.Pool`。
+
+**Step 4:** `go test ./internal/db/...` 通过；提交。`git commit -m "feat(db): schema + migrate runner"`
+
+---
+
+## 3. 密码哈希与 JWT（纯函数，可单测）
+
+**Files:** Create `server/internal/auth/auth.go`, `auth_test.go`
+
+**Step 1 (写失败测试):** `auth_test.go`
+
+```go
+func TestHashVerify(t *testing.T) {
+  h, err := HashPassword("s3cret")
+  if err != nil { t.Fatal(err) }
+  if !VerifyPassword(h, "s3cret") { t.Fatal("should verify") }
+  if VerifyPassword(h, "wrong") { t.Fatal("should reject") }
+}
+func TestJWT(t *testing.T) {
+  tok, err := SignToken("user-uuid", "secret", 15*time.Minute)
+  if err != nil { t.Fatal(err) }
+  uid, err := ParseToken(tok, "secret")
+  if err != nil || uid != "user-uuid" { t.Fatal("bad token") }
+}
+```
+
+**Step 2:** `auth.go`
+
+```go
+func HashPassword(pw string) (string, error) {
+  salt := make([]byte, 16); rand.Read(salt)
+  hash := argon2.IDKey([]byte(pw), salt, 1, 64*1024, 4, 32)
+  return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+    0x13, 64*1024, 1, 4,
+    base64.RawStdEncoding.EncodeToString(salt),
+    base64.RawStdEncoding.EncodeToString(hash)), nil
+}
+func VerifyPassword(encoded, pw string) bool {
+  parts := strings.Split(encoded, "$"); if len(parts) != 6 { return false }
+  salt, _ := base64.RawStdEncoding.DecodeString(parts[4])
+  want, _ := base64.RawStdEncoding.DecodeString(parts[5])
+  got := argon2.IDKey([]byte(pw), salt, 1, 64*1024, 4, 32)
+  return subtle.ConstantTimeCompare(want, got) == 1
+}
+func SignToken(uid, secret string, d time.Duration) (string, error) {
+  c := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+    "uid": uid, "exp": time.Now().Add(d).Unix() })
+  return c.SignedString([]byte(secret))
+}
+func ParseToken(tok, secret string) (string, error) {
+  p, err := jwt.Parse(tok, func(t *jwt.Token) (interface{}, error) { return []byte(secret), nil })
+  if err != nil { return "", err }
+  return p.Claims.(jwt.MapClaims)["uid"].(string), nil
+}
+```
+
+**Step 3:** `go test ./internal/auth/...` 通过；提交。`git commit -m "feat(auth): argon2 + JWT helpers"`
+
+---
+
+## 4. 账号 API：注册 / 登录 / 刷新
+
+**Files:** `server/internal/api/auth.go`, `api_test.go`
+
+**Step 1 (写失败测试):** `api_test.go` 用 `httptest` + `testPool`：
+
+```go
+func TestRegisterLogin(t *testing.T) {
+  r := newRouter(testPool(t))
+  // 注册
+  w := doPost(t, r, "/api/auth/register", `{"email":"a@b.com","password":"pw12345"}`)
+  if w.Code != 201 { t.Fatalf("reg %d", w.Code) }
+  // 重复邮箱 -> 409
+  if doPost(t, r, "/api/auth/register", `{"email":"a@b.com","password":"pw12345"}`).Code != 409 {
+    t.Fatal("dup should 409") }
+  // 登录
+  w2 := doPost(t, r, "/api/auth/login", `{"email":"a@b.com","password":"pw12345"}`)
+  if w2.Code != 200 { t.Fatalf("login %d", w2.Code) }
+  if !strings.Contains(w2.Body.String(), "access_token") { t.Fatal("no token") }
+}
+```
+
+**Step 2:** `auth.go` 实现 `newRouter(pool)` 挂载 `chi` 路由；`registerHandler` 校验邮箱格式 + 密码长度 ≥8，`HashPassword` 后 `INSERT`；`loginHandler` 查用户、验密、`SignToken` 返回 `access_token`(15m)+`refresh_token`(30d)；`refreshHandler` 用 refresh 换 access。
+
+**Step 3:** 实现 `requireAuth` 中间件：`Authorization: Bearer` → `ParseToken` → `r.Context()` 注入 `uid`。
+
+**Step 4:** `go test ./internal/api/...` 通过；提交。`git commit -m "feat(api): register/login/refresh + auth middleware"`
+
+---
+
+## 5. 找回密码（Mailer 接口，先开发桩）
+
+**Files:** `server/internal/mail/mail.go`, `server/internal/api/password.go`
+
+**Step 1 (写失败测试):** forgot 接口对未知邮箱也返回 200（防枚举）；reset 用正确 token 改密后可登录。
+
+**Step 2:** `mail.go` 定义 `type Mailer interface { Send(to, subject, body string) error }`；`DevMailer` 仅 `log.Printf`，由 env `MAIL_MODE=dev|aliyun` 选择；`aliyunMailer` 后续实现（不在 v3.0 阻塞项）。
+
+**Step 3:** `password.go`：`forgot` 生成随机 token，`argon2`/sha256 哈希后存 `reset_token_hash`+15 分钟过期，`Mailer.Send` 发 `lightframe://reset?token=...`；`reset` 校验后 `UPDATE password_hash`，清空 reset 字段。
+
+**Step 4:** 测试通过；提交。`git commit -m "feat(api): forgot/reset password (dev mailer)"`
+
+---
+
+## 6. 同步 API：pull / push（LWW 核心）
+
+**Files:** `server/internal/api/sync.go`, `sync_test.go`
+
+**Step 1 (写失败测试):** `sync_test.go`
+
+```go
+func TestPushPullLWW(t *testing.T) {
+  r, uid := authedRouter(t)                 // 注册并注入 uid
+  // 客户端 push 一条任务
+  body := `{"changes":[{"type":"tasks","id":"T1","title":"x","updated_at":1000,"deleted_at":null}]}`
+  doPostA(t, r, uid, "/api/sync/push", body) // 201
+  // pull since=0 应返回该条
+  w := doGetA(t, r, uid, "/api/sync/pull?since=0&types=tasks")
+  if !strings.Contains(w.Body.String(), `"id":"T1"`) { t.Fatal("missing") }
+  // 旧版本覆盖被拒：push updated_at=500（更旧）
+  doPostA(t, r, uid, "/api/sync/push",
+    `{"changes":[{"type":"tasks","id":"T1","title":"old","updated_at":500,"deleted_at":null}]}`)
+  w2 := doGetA(t, r, uid, "/api/sync/pull?since=0&types=tasks")
+  if strings.Contains(w2.Body.String(), `"title":"old"`) { t.Fatal("LWW failed") }
+}
+func TestSoftDeleteSync(t *testing.T) {
+  r, uid := authedRouter(t)
+  doPostA(t, r, uid, "/api/sync/push",
+    `{"changes":[{"type":"tasks","id":"T2","title":"d","updated_at":200,"deleted_at":900}]}`)
+  w := doGetA(t, r, uid, "/api/sync/pull?since=0&types=tasks")
+  if !strings.Contains(w.Body.String(), `"deleted_at":900`) { t.Fatal("soft del not synced") }
+}
+```
+
+**Step 2:** `sync.go`：
+- `pullHandler`：解析 `since`(ms) 与 `types`；对每类 `SELECT ... WHERE user_id=$1 AND (updated_at > $2 OR deleted_at > $2)`，返回 `{server_time, changes:[{type,row}]}`。
+- `pushHandler`：遍历 `changes`，按 `id` upsert；仅当 `incoming.updated_at > existing.updated_at`（不存在则直接插）才覆盖；返回 `{applied:[{id,updated_at}], conflicts:[...]}`。
+
+**Step 3:** 测试通过；提交。`git commit -m "feat(api): incremental pull/push with per-record LWW + soft-delete"`
+
+---
+
+## 7. 客户端 store：加 updatedAt / deletedAt / 同步游标
+
+**Files:** Modify `src/store.js`, `src/taskModel.js`; Test `src/store.test.js`
+
+**Step 1 (写失败测试):** 在 `store.test.js` 断言 `createTaskStore` 写出的任务带 `updatedAt`（number，ms）且默认 `deletedAt:null`；`removeTask` 不真删，而是置 `deletedAt`。
+
+**Step 2:** `src/taskModel.js` 的 `createTask` 增加 `updatedAt: Date.now()`；`src/store.js` 的 `createTaskStore` 在 `add/update` 时写 `updatedAt`，`remove` 时置 `deletedAt = Date.now()`（保留行）。新增 `createSyncMetaStore(jsonPath)` 持久化 `{ tasks:{lastPull:0,pushCursor:0}, daily_logs:{...}, prefs:{...} }`。
+
+**Step 3:** `npm test`；提交。`git commit -m "feat(store): updatedAt/deletedAt + sync meta store"`
+
+---
+
+## 8. SyncEngine（纯函数 + 网络分离，TDD）
+
+**Files:** Create `src/sync.js`, `src/sync.test.js`
+
+**Step 1 (写失败测试):** `src/sync.test.js`（`node --test` 风格，沿用项目 `assert`）：
+
+```js
+const S = require('./sync.js');
+test('mergeLWW: 取 updatedAt 较新者', () => {
+  const local = { id:'T1', title:'A', updatedAt:100, deletedAt:null };
+  const remote = { id:'T1', title:'B', updatedAt:200, deletedAt:null };
+  assert.deepEqual(S.mergeLWW(local, remote), remote);
+});
+test('dirtyDiff: 仅取 updatedAt > pushCursor', () => {
+  const rows = [{id:'a',updatedAt:50},{id:'b',updatedAt:120}];
+  assert.deepEqual(S.dirtyDiff(rows, 100).map(r=>r.id), ['b']);
+});
+test('applyPull: 软删行置 deletedAt 且并入', () => {
+  const local = [{id:'x',updatedAt:10,deletedAt:null}];
+  const remote = [{id:'x',updatedAt:99,deletedAt:99}];
+  const out = S.applyPull(local, remote);
+  assert.equal(out.find(r=>r.id==='x').deletedAt, 99);
+});
+```
+
+**Step 2:** `src/sync.js` 导出纯函数 `mergeLWW(local,remote)`、`dirtyDiff(rows,cursor)`、`applyPull(local,remote)`、`toWire(rows,type)`、`fromWire(change)`；以及 `class SyncEngine`（持有 `baseUrl`、`token`、`meta`、注入的 `store` 与 `fetch`），方法 `push()/pull()/markDirty(type,id)/schedule()`（防抖）、`onOnline()`。网络调用仅在 `SyncEngine` 内，纯函数可单测。
+
+**Step 3:** `npm test`；提交。`git commit -m "feat(sync): SyncEngine pure fns + pull/push/dirty"`
+
+---
+
+## 9. 把本地变更接到 SyncEngine
+
+**Files:** Modify `src/renderer.js`
+
+**Step 1 (写失败测试):** 在 `renderer.test.js` 或手工验证：调用 `handleAdd` 后 `SyncEngine.markDirty('tasks', id)` 被触发（可用 spy）。若暂无以 renderer 单测，跳过写测试、仅做代码审查。
+
+**Step 2:** 在 `handleAdd / 任务完成切换 / 任务编辑保存 / 删除任务 / 写日报 / 改 prefs` 每个 mutation 后追加 `SyncEngine.get().markDirty(type, id)`；`init()` 末尾启动 `SyncEngine.get().start()`（监听 `window.online/offline` + 周期 30s）。
+
+**Step 3:** `node --check src/renderer.js`；`npm test`；提交。`git commit -m "feat(renderer): wire mutations to SyncEngine"`
+
+---
+
+## 10. 账号 UI（登录/注册/状态/设置）
+
+**Files:** Modify `index.html`, `src/styles.css`, `src/renderer.js`
+
+**Step 1:** `index.html` 新增账号区（手柄旁或设置内）：`#account-bar`（显示「未登录 / 用户名」+「登录」按钮）、登录弹窗 `#auth-modal`（邮箱/密码/注册切换/错误提示/找回密码链接）。
+
+**Step 2:** `styles.css` 给 modal 与账号条加玻璃卡样式（复用既有 `--paper-3`/`--accent` 变量）。
+
+**Step 3:** `renderer.js` 实现 `openAuthModal()/handleLogin()/handleRegister()/handleLogout()`，登录成功存 `token`+`user` 到 settings，启动 `SyncEngine` 并触发首次 `pull`；账号条显示同步状态（同步中/已同步/失败）。
+
+**Step 4:** `node --check`；提交。`git commit -m "feat(ui): account login/register modal + sync status"`
+
+---
+
+## 11. 首次登录：本地数据上云（seed）
+
+**Files:** Modify `src/sync.js`, `src/renderer.js`
+
+**Step 1 (写失败测试):** `sync.test.js` 断言 `seedFromLocal(localRows)` 把每条本地行标脏（`updatedAt` 设为当前并进入 push 队列）。
+
+**Step 2:** 登录成功后若 `meta.tasks.lastPull===0`（从未同步过），调用 `seedFromLocal`：把本地全部内容 `markDirty`，随后 `push()` 一次作为账号初始种子；云端已有数据则 LWW 自然合并。
+
+**Step 3:** `npm test`；提交。`git commit -m "feat(sync): seed local data on first login"`
+
+---
+
+## 12. 打包 / 部署说明
+
+**Files:** Create `server/Dockerfile`（或部署脚本）, 更新 `README.md` 的 v3.0 段。
+
+**Step 1:** `server/Dockerfile`：`FROM golang:1.22-alpine` 编译单二进制，`ENTRYPOINT ["./server"]`，env `DATABASE_URL/PORT/JWT_SECRET/MAIL_MODE`。
+
+**Step 2:** `README.md` 增加「v3.0 自建同步服务端」小节：阿里云 ECS 起容器 + RDS Postgres + HTTPS 证书；客户端设置里填 `sync.serverUrl`。
+
+**Step 3:** 提交。`git commit -m "docs: v3.0 deploy + client server-url setting"`
+
+---
+
+## 13. 验收矩阵（对照设计稿 §5）
+
+- [ ] 同账号双端：A 新建/改/删任务，B 联网后一致（含删除）。
+- [ ] 断网期间操作可用；恢复后自动补齐，无丢失。
+- [ ] 双端同时改同一条：以 `updated_at` 新者为准，无弹窗无重复。
+- [ ] 首次登录把本地既有数据带入云端。
+- [ ] 挂件坐标/透明度/穿透不随账号同步。
+- [ ] 找回密码走邮箱链接可重置；错误口令被限流。
+- [ ] 单测：Go `go test ./...` 全绿；Node `npm test` 全绿；`node --check` 关键文件通过。
+
+**执行前提醒：** 后端 `TEST_DATABASE_URL` 指向一个空的 Postgres 实例（`MigrateUp` 会自动建表）；无 DB 时相关测试 `t.Skip`。
