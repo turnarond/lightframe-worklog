@@ -103,3 +103,30 @@ test('SYNCABLE_PREFS 不含本机专属键', () => {
     assert.ok(SB.SYNCABLE_PREFS.indexOf(k) < 0, k + ' 不应上云');
   });
 });
+
+test('prefs LWW 回归: 远端较新的偏好在 pull 时被采纳', async () => {
+  const dir = tmpDir();
+  const settingsStore = Store.createSettingsStore(path.join(dir, 'settings.json'));
+  await settingsStore.save({ categories: ['本地'], defaultPriority: 'mid' });
+  const bridge = SB.createSyncBridge({
+    tasksStore: Store.createTaskStore(path.join(dir, 'tasks.json')),
+    logsStore: Store.createLogStore(path.join(dir, 'logs.json')),
+    settingsStore: settingsStore,
+    syncMetaStore: Store.createSyncMetaStore(path.join(dir, 'meta.json')),
+    fetchImpl: async function (method, url) {
+      if (method === 'GET' && url.indexOf('/pull') >= 0) {
+        return {
+          ok: true, status: 200,
+          json: { server_time: 5000, changes: [
+            { type: 'prefs', key: 'categories', value: ['云端'], updatedAt: 4000, deletedAt: null }
+          ] }
+        };
+      }
+      return { ok: true, status: 200, json: { server_time: 5000 } };
+    }
+  });
+  bridge.setAuth('https://s.example', 'TK');
+  await bridge.syncNow();
+  const s = await settingsStore.load();
+  assert.deepEqual(s.categories, ['云端'], '远端较新偏好应被 pull 采纳（修复前会被本机值覆盖）');
+});
