@@ -65,7 +65,7 @@ function toWire(rows, type) {
 
 /** 线上变更体剥离 type 字段还原为行 */
 function fromWire(change) {
-  if (!change || typeof change !== 'object') return change;
+  if (!change || typeof change !== 'object' || Array.isArray(change)) return change;
   const out = {};
   Object.keys(change).forEach(function (k) {
     if (k !== 'type') out[k] = change[k];
@@ -118,7 +118,7 @@ class SyncEngine {
    * 标记某类型有变更：本实现以「updatedAt > pushCursor」判定脏行，
    * 故 markDirty 仅触发防抖同步；也可手动调用 syncNow 立即同步。
    */
-  markDirty(type) {
+  markDirty(type, id) {
     if (TYPES.indexOf(type) < 0) return;
     this.schedule();
   }
@@ -131,14 +131,23 @@ class SyncEngine {
   onOnline() { return this.syncNow(); }
 
   async syncNow() {
-    await this.pull();
-    await this.push();
+    if (this._inFlight) return this._inFlight;
+    this._inFlight = (async () => {
+      try {
+        await this.pull();
+        await this.push();
+      } finally {
+        this._inFlight = null;
+      }
+    })();
+    return this._inFlight;
   }
 
   async pull() {
     const meta = await this.getMeta();
     let serverTime = Date.now();
     for (const type of TYPES) {
+      if (!meta[type]) meta[type] = { lastPull: 0, pushCursor: 0 };
       const since = meta[type].lastPull || 0;
       const res = await this.fetchImpl('GET',
         this.baseUrl + '/api/sync/pull?since=' + since + '&types=' + type, null);
@@ -148,10 +157,16 @@ class SyncEngine {
       const local = await this.getLocal(type);
       const merged = applyPull(local, remoteRows);
       await this.putLocal(type, merged);
+      let pulledMax = 0;
+      remoteRows.forEach(function (r) {
+        const u = toMs(r.updatedAt);
+        if (u > pulledMax) pulledMax = u;
+      });
       if (res.json && res.json.server_time) serverTime = toMs(res.json.server_time);
+      // lastPull 用 server_time（下次拉取从该时刻之后）；pushCursor 只推进到「本次拉回行的最大 updatedAt」，
+      // 避免本地时钟慢时在 pull→push 窗口内的编辑被误判为已同步而丢失
       meta[type].lastPull = serverTime;
-      // 把拉取的较新行视为已同步，避免随后被当作脏行重复推送
-      meta[type].pushCursor = Math.max(meta[type].pushCursor || 0, serverTime);
+      meta[type].pushCursor = Math.max(meta[type].pushCursor || 0, pulledMax);
     }
     await this.setMeta(meta);
   }

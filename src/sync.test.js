@@ -86,7 +86,7 @@ function memAdapters(initial) {
 test('SyncEngine.pull: 拉取并合并，推进 lastPull 与 pushCursor', async () => {
   const ad = memAdapters({ tasks: [TASK('LOCAL', 10)], daily_logs: [], prefs: [] });
   const engine = new S.SyncEngine({
-    baseUrl: 'https://s.example/api',
+    baseUrl: 'https://s.example',
     token: 'TK',
     getLocal: ad.getLocal, putLocal: ad.putLocal, getMeta: ad.getMeta, setMeta: ad.setMeta,
     fetchImpl: async (method, url, body) => {
@@ -104,7 +104,8 @@ test('SyncEngine.pull: 拉取并合并，推进 lastPull 与 pushCursor', async 
   const remote = ad.data.tasks.find(r => r.id === 'REMOTE');
   assert.ok(remote, '远程行已写入');
   assert.equal(ad.meta.tasks.lastPull, 1000);
-  assert.equal(ad.meta.tasks.pushCursor, 1000, '拉取后 pushCursor 跟进，避免重复推送');
+  assert.equal(ad.meta.tasks.pushCursor, 900, 'pushCursor 仅推进到拉回行最大 updatedAt，避免慢时钟下编辑丢失');
+  assert.equal(ad.calls[0].url, 'https://s.example/api/sync/pull?since=0&types=tasks', '请求 URL 契约正确（origin + /api）');
 });
 
 test('SyncEngine.push: 仅推送脏行，推进 pushCursor', async () => {
@@ -112,7 +113,7 @@ test('SyncEngine.push: 仅推送脏行，推进 pushCursor', async () => {
   ad.meta.tasks.pushCursor = 100; // 仅 A 为脏
   let pushed = null;
   const engine = new S.SyncEngine({
-    baseUrl: 'https://s.example/api',
+    baseUrl: 'https://s.example',
     getLocal: ad.getLocal, putLocal: ad.putLocal, getMeta: ad.getMeta, setMeta: ad.setMeta,
     fetchImpl: async (method, url, body) => {
       if (method === 'POST' && url.indexOf('/push') >= 0) { pushed = body; }
@@ -130,7 +131,7 @@ test('SyncEngine.syncNow: 先 pull 后 push，且 pull 的远程行不回推', a
   const ad = memAdapters({ tasks: [TASK('LOCAL', 10)], daily_logs: [], prefs: [] });
   let pushBody = null;
   const engine = new S.SyncEngine({
-    baseUrl: 'https://s.example/api',
+    baseUrl: 'https://s.example',
     getLocal: ad.getLocal, putLocal: ad.putLocal, getMeta: ad.getMeta, setMeta: ad.setMeta,
     fetchImpl: async (method, url, body) => {
       if (method === 'GET') {
