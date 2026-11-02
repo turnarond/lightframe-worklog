@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'" />
+<title>随手记一笔</title>
+<style>
+  :root {
+    --paper: #f3ece0;
+    --paper-deep: #e8dcc8;
+    --ink: #2c2620;
+    --ink-soft: #6f6353;
+    --accent: #c2613f;
+    --line: rgba(44, 38, 32, 0.22);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Karla, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 14px 18px 12px;
+    border: 1px solid var(--line);
+    position: relative;
+  }
+  /* 纸质噪点 */
+  body::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.16'/></svg>");
+  }
+  .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    -webkit-app-region: drag;
+  }
+  .label {
+    font-family: Fraunces, "Georgia", "Songti SC", "SimSun", serif;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  #title {
+    -webkit-app-region: no-drag;
+    width: 100%;
+    border: none;
+    border-bottom: 1.5px dashed var(--line);
+    background: transparent;
+    padding: 4px 1px 8px;
+    font-size: 17px;
+    font-family: inherit;
+    color: var(--ink);
+    outline: none;
+  }
+  #title::placeholder { color: rgba(44, 38, 32, 0.34); }
+  #title:focus { border-bottom-color: var(--accent); }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 9px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: rgba(194, 97, 63, 0.1);
+    color: var(--accent);
+    font-weight: 600;
+    max-width: 150px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  select {
+    -webkit-app-region: no-drag;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--paper-deep);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 2px 4px;
+    outline: none;
+    cursor: pointer;
+  }
+  select:focus { border-color: var(--accent); }
+  .hint {
+    margin-left: auto;
+    font-size: 11px;
+    color: rgba(44, 38, 32, 0.42);
+    letter-spacing: 0.02em;
+  }
+  .hint kbd {
+    font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+    font-size: 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 4px;
+    background: rgba(255, 255, 255, 0.4);
+  }
+  .status {
+    position: absolute;
+    right: 18px;
+    bottom: 4px;
+    font-size: 10px;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.18s ease;
+  }
+  .status.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <span class="label">✎ 随手记一笔</span>
+  </div>
+
+  <input id="title" type="text" autocomplete="off" spellcheck="false" placeholder="记点什么… 回车保存" />
+
+  <div class="row">
+    <span class="chip" id="catChip" title="沿用上次分类">· 工作</span>
+    <label for="priority">优先级</label>
+    <select id="priority">
+      <option value="high">高</option>
+      <option value="mid" selected>中</option>
+      <option value="low">低</option>
+    </select>
+    <span class="hint"><kbd>Esc</kbd> 取消</span>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <script src="src/taskModel.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      const input = document.getElementById('title');
+      const priorityEl = document.getElementById('priority');
+      const catChip = document.getElementById('catChip');
+      const statusEl = document.getElementById('status');
+
+      let category = '工作';
+      let busy = false;
+
+      function flash(text) {
+        statusEl.textContent = text;
+        statusEl.classList.add('show');
+        setTimeout(function () { statusEl.classList.remove('show'); }, 1400);
+      }
+
+      function focusInput() {
+        input.focus();
+        input.select();
+      }
+
+      async function init() {
+        try {
+          const settings = await window.api.loadSettings();
+          if (settings && typeof settings.lastCategory === 'string' && settings.lastCategory.trim()) {
+            category = settings.lastCategory.trim();
+          } else if (settings && Array.isArray(settings.categories) && settings.categories.length) {
+            category = settings.categories[0];
+          }
+        } catch (err) {
+          /* 读不到就用默认分类 */
+        }
+        catChip.textContent = '· ' + category;
+        catChip.title = '分类：' + category + '（沿用上次）';
+        focusInput();
+      }
+
+      async function save() {
+        if (busy) return;
+        const title = input.value.trim();
+        if (!title) {
+          flash('先写点什么');
+          input.focus();
+          return;
+        }
+        busy = true;
+        try {
+          const tasks = await window.api.loadTasks();
+          const task = window.TaskModel.createTask({
+            title: title,
+            category: category,
+            priority: priorityEl.value
+          });
+          if (!task) {
+            busy = false;
+            input.focus();
+            return;
+          }
+          const list = Array.isArray(tasks) ? tasks : [];
+          list.push(task);
+          await window.api.saveTasks(list);
+          await window.api.notifyRefresh();
+          input.value = '';
+          busy = false;
+          window.api.hideWindow();
+        } catch (err) {
+          busy = false;
+          flash('保存失败');
+          console.error(err);
+        }
+      }
+
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.isComposing) {
+          e.preventDefault();
+          save();
+        }
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          window.api.hideWindow();
+        }
+      });
+
+      // 失焦后隐藏，但要绕开优先级下拉：原生下拉弹出时窗口会短暂失焦，
+      // 直接隐藏会把用户正在填的那条一起带走。
+      function hideWhenReallyBlurred() {
+        setTimeout(function () {
+          if (document.hasFocus()) return;
+          var active = document.activeElement;
+          if (active && active.id === 'priority') return;
+          try { window.api.hideWindow(); } catch (err) { /* 忽略 */ }
+        }, 180);
+      }
+      window.addEventListener('blur', hideWhenReallyBlurred);
+
+      document.addEventListener('DOMContentLoaded', init);
+      if (document.readyState !== 'loading') init();
+
+      // 再次唤起时重新聚焦
+      window.addEventListener('focus', focusInput);
+    })();
+  </script>
+</body>
+</html>

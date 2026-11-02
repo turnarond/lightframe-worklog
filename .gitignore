@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tmp.js
+a.txt
+smoke-widget.tmp.js
+.DS_Store
+*.log

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>光影工作志 · 桌面挂件设计预览</title>
+<style>
+  :root {
+    --paper: #f7f0e4;
+    --paper-2: #efe6d4;
+    --paper-3: #e7ddc9;
+    --line: #d8c9ac;
+    --line-soft: #e6dcc6;
+    --ink: #2c2620;
+    --ink-soft: #6b5f4e;
+    --accent: #7d2e2e;
+    --accent-deep: #5e2020;
+    /* 玻璃拟态（桌面融合） */
+    --glass-bg: rgba(247, 240, 228, 0.55);
+    --glass-border: rgba(125, 46, 46, 0.18);
+    --glass-blur: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    /* 模拟桌面壁纸，便于观察融合效果 */
+    background:
+      radial-gradient(1200px 700px at 80% -10%, #cfe3ef 0%, transparent 60%),
+      radial-gradient(900px 600px at -10% 110%, #e9d8c2 0%, transparent 55%),
+      linear-gradient(160deg, #2f3b4c 0%, #4a4438 55%, #6b5a45 100%);
+    color: var(--ink);
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 48px 24px;
+  }
+
+  /* ===== 挂件本体 ===== */
+  .widget {
+    width: 320px;
+    border-radius: 16px;
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 10px 34px rgba(40, 25, 10, 0.22);
+    opacity: var(--op, 0.9);
+    overflow: hidden;
+    user-select: none;
+  }
+  .widget.clickthrough { pointer-events: none; }
+  .widget.clickthrough .handle { pointer-events: auto; }
+
+  .handle {
+    height: 22px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink-soft);
+    cursor: grab;
+    background: rgba(125, 46, 46, 0.06);
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .handle:active { cursor: grabbing; }
+
+  .whead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px 6px;
+  }
+  .whead .date { font-size: 15px; font-weight: 700; }
+  .whead .wd { font-size: 11px; color: var(--ink-soft); font-weight: 400; }
+  .whead .clock {
+    margin-left: auto;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px;
+    color: var(--accent-deep);
+  }
+  .wtools { display: flex; gap: 6px; }
+  .wtools button {
+    width: 24px; height: 24px; border-radius: 7px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255,255,255,0.35);
+    color: var(--ink); cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  .wtools button:hover { background: var(--accent); color: #fff; }
+
+  .cal { padding: 4px 12px 8px; }
+  .calnav { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 6px; }
+  .calnav button {
+    width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--glass-border);
+    background: rgba(255,255,255,0.3); cursor: pointer; color: var(--ink);
+  }
+  .calnav span { font-size: 13px; font-weight: 700; min-width: 96px; text-align: center; }
+  .weekrow, .grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .weekrow { font-size: 10px; color: var(--ink-soft); text-align: center; margin-bottom: 2px; }
+  .grid { gap: 2px; }
+  .cell {
+    position: relative; aspect-ratio: 1 / 1; display: grid; place-items: center;
+    font-size: 12px; border-radius: 8px; color: var(--ink);
+  }
+  .cell.muted { color: rgba(107, 95, 78, 0.4); }
+  .cell.today { background: var(--accent); color: #fff; font-weight: 700; }
+  .cell.has::after {
+    content: ""; position: absolute; bottom: 4px; width: 4px; height: 4px;
+    border-radius: 50%; background: var(--accent);
+  }
+  .cell.today.has::after { background: #fff; }
+  .cell:not(.today):hover { background: rgba(125, 46, 46, 0.12); cursor: pointer; }
+
+  .today { padding: 8px 12px 12px; border-top: 1px solid var(--glass-border); }
+  .today-h { font-size: 12px; font-weight: 700; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .today-h span { color: var(--ink-soft); font-weight: 400; }
+  .tlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 132px; overflow: auto; }
+  .tlist li {
+    display: flex; align-items: center; gap: 8px; font-size: 12px;
+    padding: 6px 8px; border-radius: 9px; background: rgba(255,255,255,0.32);
+    border: 1px solid var(--glass-border); cursor: pointer;
+  }
+  .tlist li:hover { background: rgba(125, 46, 46, 0.1); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.high { background: #b4452f; }
+  .dot.mid { background: #c98a2b; }
+  .dot.low { background: #6f8f5a; }
+  .tlist .tt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tlist .due { font-size: 10px; color: var(--ink-soft); }
+  .tlist .done { text-decoration: line-through; color: var(--ink-soft); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: rgba(44,38,32,0.92); color: #f7f0e4; padding: 8px 14px; border-radius: 10px;
+    font-size: 12px; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ===== 预览控制台（不属于产品，仅用于调参） ===== */
+  .controls {
+    width: 280px; background: rgba(255,255,255,0.92); border-radius: 14px; padding: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2); align-self: flex-start;
+  }
+  .controls h3 { margin: 0 0 12px; font-size: 14px; }
+  .controls label { display: block; margin: 10px 0; font-size: 12px; color: #333; }
+  .controls input[type=range] { width: 100%; }
+  .controls .hint { font-size: 11px; color: #666; line-height: 1.5; margin-top: 12px; }
+</style>
+</head>
+<body>
+  <div class="widget" id="widget" style="--op:0.9">
+    <div class="handle" id="handle">⠿ 拖动 · 光影工作志</div>
+    <div class="whead">
+      <div class="date" id="date">—</div>
+      <div class="clock" id="clock">--:--</div>
+      <div class="wtools">
+        <button id="addBtn" title="新建任务">＋</button>
+        <button id="setBtn" title="设置">⚙</button>
+      </div>
+    </div>
+    <div class="cal">
+      <div class="calnav">
+        <button id="prev">‹</button>
+        <span id="calTitle">—</span>
+        <button id="next">›</button>
+      </div>
+      <div class="weekrow"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="today">
+      <div class="today-h">今日任务 <span id="todayCount"></span></div>
+      <ul class="tlist" id="tlist"></ul>
+    </div>
+  </div>
+
+  <div class="controls">
+    <h3>设计预览控制台</h3>
+    <label>透明度 <input type="range" id="op" min="0.4" max="1" step="0.05" value="0.9"></label>
+    <label>背景模糊 <input type="range" id="blur" min="0" max="24" step="1" value="14"></label>
+    <label><input type="checkbox" id="ct"> 鼠标穿透（空闲时仅手柄可拖拽）</label>
+    <p class="hint">这是「前端设计」静态原型，用于确认外观与布局，尚未接入真实数据。
+      拖动手柄可移动挂件；双击某天模拟「新建」、双击任务模拟「编辑」。</p>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  var W = window;
+  var today = new Date();
+  var view = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  // 模拟数据
+  var sample = {};
+  function key(y, m, d) { return y + '-' + (m + 1) + '-' + d; }
+  sample[key(today.getFullYear(), today.getMonth(), today.getDate())] = [
+    { title: '修完图库导出', pri: 'high', due: '今天', done: false },
+    { title: '周报草稿', pri: 'mid', due: '今天', done: true },
+    { title: '买咖啡豆', pri: 'low', due: '', done: false }
+  ];
+  sample[key(today.getFullYear(), today.getMonth(), today.getDate() + 2)] = [
+    { title: '客户评审', pri: 'high', due: '', done: false }
+  ];
+  sample[key(today.getFullYear(), today.getMonth(), today.getDate() - 3)] = [
+    { title: '备份素材', pri: 'low', due: '', done: false }
+  ];
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  var WD = ['日', '一', '二', '三', '四', '五', '六'];
+
+  function renderHead() {
+    document.getElementById('date').textContent =
+      (today.getMonth() + 1) + '月' + today.getDate() + '日';
+    var wd = document.querySelector('.whead .wd');
+    // 用 textContent 追加需重建，这里简单处理
+    document.getElementById('date').innerHTML =
+      (today.getMonth() + 1) + '月' + today.getDate() + '日 <span class="wd">周' + WD[today.getDay()] + '</span>';
+  }
+  function tick() {
+    var n = new Date();
+    document.getElementById('clock').textContent = pad(n.getHours()) + ':' + pad(n.getMinutes());
+  }
+  tick(); setInterval(tick, 1000);
+
+  function renderCal() {
+    var y = view.getFullYear(), m = view.getMonth();
+    document.getElementById('calTitle').textContent = y + '年' + (m + 1) + '月';
+    var first = new Date(y, m, 1).getDay();
+    var days = new Date(y, m + 1, 0).getDate();
+    var prevDays = new Date(y, m, 0).getDate();
+    var grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    for (var i = 0; i < 42; i++) {
+      var cell = document.createElement('div');
+      cell.className = 'cell';
+      var d, mute = false;
+      if (i < first) { d = prevDays - first + 1 + i; mute = true; }
+      else if (i >= first + days) { d = i - (first + days) + 1; mute = true; }
+      else { d = i - first + 1; }
+      cell.textContent = d;
+      if (mute) cell.classList.add('muted');
+      var k = key(y, m, d);
+      if (!mute && sample[k]) cell.classList.add('has');
+      if (!mute && d === today.getDate() && m === today.getMonth() && y === today.getFullYear()) {
+        cell.classList.add('today');
+      }
+      if (!mute) {
+        (function (theDate) {
+          cell.addEventListener('dblclick', function () {
+            showToast('（模拟）在 ' + (m + 1) + '月' + theDate + '日 新建任务');
+          });
+        })(d);
+      }
+      grid.appendChild(cell);
+    }
+  }
+
+  function renderToday() {
+    var k = key(today.getFullYear(), today.getMonth(), today.getDate());
+    var list = sample[k] || [];
+    document.getElementById('todayCount').textContent = list.length ? '(' + list.length + ')' : '';
+    var ul = document.getElementById('tlist');
+    ul.innerHTML = '';
+    list.forEach(function (t) {
+      var li = document.createElement('li');
+      if (t.done) li.classList.add('done');
+      li.innerHTML = '<span class="dot ' + t.pri + '"></span>' +
+        '<span class="tt">' + t.title + '</span>' +
+        (t.due ? '<span class="due">' + t.due + '</span>' : '');
+      li.addEventListener('dblclick', function () {
+        showToast('（模拟）编辑任务：' + t.title);
+      });
+      ul.appendChild(li);
+    });
+  }
+
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function () { t.classList.remove('show'); }, 1600);
+  }
+
+  // 拖拽
+  (function () {
+    var w = document.getElementById('widget');
+    var h = document.getElementById('handle');
+    var sx, sy, ox, oy, drag = false;
+    h.addEventListener('mousedown', function (e) {
+      drag = true; sx = e.clientX; sy = e.clientY;
+      var r = w.getBoundingClientRect(); ox = r.left; oy = r.top;
+      w.style.position = 'fixed'; w.style.left = ox + 'px'; w.style.top = oy + 'px'; w.style.margin = '0';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      w.style.left = (ox + e.clientX - sx) + 'px';
+      w.style.top = (oy + e.clientY - sy) + 'px';
+    });
+    document.addEventListener('mouseup', function () { drag = false; });
+  })();
+
+  document.getElementById('prev').addEventListener('click', function () {
+    view = new Date(view.getFullYear(), view.getMonth() - 1, 1); renderCal();
+  });
+  document.getElementById('next').addEventListener('click', function () {
+    view = new Date(view.getFullYear(), view.getMonth() + 1, 1); renderCal();
+  });
+  document.getElementById('addBtn').addEventListener('click', function () { showToast('（模拟）新建任务'); });
+  document.getElementById('setBtn').addEventListener('click', function () { showToast('（模拟）打开设置'); });
+
+  // 控制台
+  document.getElementById('op').addEventListener('input', function (e) {
+    document.getElementById('widget').style.setProperty('--op', e.target.value);
+  });
+  document.getElementById('blur').addEventListener('input', function (e) {
+    document.documentElement.style.setProperty('--glass-blur', e.target.value + 'px');
+  });
+  document.getElementById('ct').addEventListener('change', function (e) {
+    document.getElementById('widget').classList.toggle('clickthrough', e.target.checked);
+  });
+
+  renderHead(); renderCal(); renderToday();
+})();
+</script>
+</body>
+</html>

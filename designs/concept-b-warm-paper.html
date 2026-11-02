@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>概念 B · 暖纸手账</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Karla:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f3ece0; --paper-2:#efe6d6; --ink:#2c2620; --ink-soft:#6f6657;
+    --line:#d8ccb6; --accent:#c2613f; --accent-soft:#e7c9b8;
+    --p-high:#b23a2e; --p-mid:#c2613f; --p-low:#9a8f7a;
+    --r-lg:22px; --r-md:14px; --r-sm:9px;
+    --shadow:0 24px 60px rgba(80,60,40,.28);
+    --display:"Fraunces","Songti SC",serif;
+    --body:"Karla","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--body); color:var(--ink); min-height:100vh;
+    background:radial-gradient(1100px 700px at 50% -10%, #e7ddca, #cabfa6 75%);
+    display:flex; align-items:flex-start; justify-content:center; padding:48px 16px;
+    -webkit-font-smoothing:antialiased;}
+  .stage{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .tag{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:#5e5238;border:1px solid #a89a82;border-radius:999px;
+    padding:5px 14px;background:rgba(255,255,255,.45)}
+  .window{width:400px; background:var(--paper); border-radius:var(--r-lg);
+    box-shadow:var(--shadow); overflow:visible; position:relative;
+    border:1px solid #e3d8c2;}
+  /* 纸质噪点 */
+  .window::before{content:"";position:absolute;inset:0;border-radius:var(--r-lg);pointer-events:none;
+    opacity:.5;mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");}
+  .inner{position:relative; padding:18px 20px 22px}
+  /* 标题 */
+  .titlebar{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .seal{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:700;font-size:15px;
+    box-shadow:0 4px 10px rgba(194,97,63,.4)}
+  .titlebar h1{font-family:var(--display);font-weight:600;font-size:22px;letter-spacing:-.01em}
+  .titlebar .date{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-soft)}
+  .rule{height:2px;background:repeating-linear-gradient(90deg,var(--line) 0 8px,transparent 8px 14px);margin:8px 0 14px}
+  /* 速记 */
+  .quickadd{background:var(--paper-2);border:1.5px dashed var(--accent-soft);border-radius:var(--r-md);
+    padding:14px;margin-bottom:16px}
+  .quickadd label{font-family:var(--display);font-style:italic;font-size:13px;color:var(--accent)}
+  .add-row{display:flex;gap:10px;margin-top:8px;align-items:flex-end}
+  .add-input{flex:1;background:transparent;border:none;border-bottom:2px solid var(--line);outline:none;
+    font-family:var(--body);font-size:17px;color:var(--ink);padding:6px 2px;caret-color:var(--accent)}
+  .add-input::placeholder{color:#b3a78f}
+  .add-input:focus{border-color:var(--accent)}
+  .add-btn{background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:var(--body);
+    font-weight:700;font-size:14px;padding:9px 15px;border-radius:var(--r-sm);transition:.15s}
+  .add-btn:active{transform:scale(.96)}
+  .controls{display:flex;align-items:center;gap:10px;margin-top:12px}
+  .date-chip{font-family:var(--mono);font-size:12px;color:var(--ink-soft);
+    background:#fff7ec;border:1px solid var(--line);border-radius:999px;padding:5px 10px}
+  .segmented{margin-left:auto;display:flex;gap:6px}
+  .segmented button{border:1.5px solid var(--line);background:transparent;color:var(--ink-soft);
+    cursor:pointer;font-family:var(--body);font-weight:700;font-size:12px;padding:5px 12px;border-radius:999px;transition:.2s}
+  .segmented button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  /* 统计 */
+  .stats{display:flex;gap:10px;margin-bottom:16px}
+  .stat{flex:1;background:#fff7ec;border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px;text-align:center}
+  .stat .n{font-family:var(--display);font-weight:700;font-size:24px;line-height:1}
+  .stat .l{font-size:11px;color:var(--ink-soft);margin-top:4px}
+  .stat.over .n{color:var(--p-high)}.stat.today .n{color:var(--accent)}.stat.soon .n{color:var(--ink)}
+  /* 列表 */
+  .list{max-height:330px;overflow:auto;padding-right:2px}
+  .group{margin-bottom:12px}
+  .group-head{display:flex;align-items:center;gap:8px;margin:4px 0}
+  .group-head h2{font-family:var(--display);font-weight:600;font-size:15px}
+  .group-head .c{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+  .group-head .mk{width:9px;height:9px;border-radius:50%}
+  .mk.over{background:var(--p-high)}.mk.today{background:var(--accent)}.mk.soon{background:var(--ink-soft)}.mk.done{background:#7e9b6f}
+  .task{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;margin:6px 0;
+    background:#fffaf2;border:1px solid var(--line);border-radius:var(--r-md);
+    box-shadow:0 2px 0 rgba(140,120,90,.08);transition:.18s}
+  .task:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(140,120,90,.16)}
+  .check{width:20px;height:20px;border-radius:6px;border:2px solid var(--accent-soft);flex:none;margin-top:1px;cursor:pointer;transition:.2s}
+  .task.done .check{background:#7e9b6f;border-color:#7e9b6f;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 6l3 3 5-6' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:center}
+  .task .body{flex:1;min-width:0}
+  .task .t{font-size:14px;font-weight:500;line-height:1.4}
+  .task.done .t{color:var(--ink-soft);text-decoration:line-through}
+  .task .meta{display:flex;align-items:center;gap:8px;margin-top:5px}
+  .task .d{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+  .pill{font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px}
+  .pill.high{color:var(--p-high);background:rgba(178,58,46,.12)}
+  .pill.mid{color:var(--p-mid);background:rgba(194,97,63,.14)}
+  .pill.low{color:var(--p-low);background:rgba(154,143,122,.18)}
+  .del{margin-left:auto;color:#b3a78f;cursor:pointer;border:none;background:none;font-size:14px;opacity:0;transition:.2s}
+  .task:hover .del{opacity:1}
+  /* 月历 */
+  .cal{margin-top:6px;background:#fff7ec;border:1px solid var(--line);border-radius:var(--r-md);padding:12px}
+  .cal-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .cal-head .m{font-family:var(--display);font-weight:600;font-size:15px}
+  .cal-head .nav{margin-left:auto;display:flex;gap:6px}
+  .cal-head .nav button{width:24px;height:24px;border-radius:7px;border:1px solid var(--line);background:#fffaf2;color:var(--ink-soft);cursor:pointer;font-size:12px}
+  .wd{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px}
+  .wd span{text-align:center;font-family:var(--mono);font-size:10px;color:#a99c83;padding:2px 0}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .day{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-size:12px;color:var(--ink);border-radius:8px;position:relative;cursor:pointer;font-variant-numeric:tabular-nums;transition:.18s}
+  .day.empty{visibility:hidden}
+  .day:hover{background:#f0e4d2}
+  .day.today{background:var(--accent);color:#fff;font-weight:700}
+  .day.sel{outline:2px solid var(--accent);outline-offset:1px}
+  .day .dot{position:absolute;bottom:5px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+  .day.today .dot{background:#fff}
+  /* 入场 */
+  .reveal{opacity:0;transform:translateY(16px)}
+  .in .reveal{opacity:1;transform:none;transition:opacity .55s cubic-bezier(.16,1,.3,1),transform .55s cubic-bezier(.16,1,.3,1)}
+  .in .reveal:nth-child(1){transition-delay:.05s}.in .reveal:nth-child(2){transition-delay:.13s}
+  .in .reveal:nth-child(3){transition-delay:.21s}.in .reveal:nth-child(4){transition-delay:.3s}
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="tag">概念 B · 暖纸手账 / Organic Paper</div>
+  <div class="window in">
+    <div class="inner">
+      <header class="titlebar reveal">
+        <div class="seal">光</div>
+        <h1>光影手账</h1>
+        <span class="date">10/31 周六</span>
+      </header>
+      <div class="rule reveal"></div>
+
+      <section class="quickadd reveal">
+        <label>✎ 随手记一笔</label>
+        <div class="add-row">
+          <input class="add-input" id="ai" placeholder="今天要记得…" />
+          <button class="add-btn" id="ab">记下</button>
+        </div>
+        <div class="controls">
+          <span class="date-chip">🗓 截止 —</span>
+          <div class="segmented" id="seg">
+            <button data-p="high">高</button>
+            <button data-p="mid" class="on">中</button>
+            <button data-p="low">低</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats reveal">
+        <div class="stat over"><div class="n">2</div><div class="l">逾期</div></div>
+        <div class="stat today"><div class="n">3</div><div class="l">今天</div></div>
+        <div class="stat soon"><div class="n">5</div><div class="l">即将</div></div>
+      </section>
+
+      <section class="list reveal">
+        <div class="group">
+          <div class="group-head"><span class="mk over"></span><h2>逾期</h2><span class="c">2</span></div>
+          <div class="task"><span class="check"></span><div class="body"><div class="t">给客户回邮件</div><div class="meta"><span class="d">10-28</span><span class="pill high">高</span></div></div><button class="del">✕</button></div>
+          <div class="task"><span class="check"></span><div class="body"><div class="t">提交报销单</div><div class="meta"><span class="d">10-29</span><span class="pill mid">中</span></div></div><button class="del">✕</button></div>
+        </div>
+        <div class="group">
+          <div class="group-head"><span class="mk today"></span><h2>今天</h2><span class="c">3</span></div>
+          <div class="task"><span class="check"></span><div class="body"><div class="t">17:00 团队周会</div><div class="meta"><span class="d">10-31</span><span class="pill high">高</span></div></div><button class="del">✕</button></div>
+          <div class="task"><span class="check"></span><div class="body"><div class="t">买周末露营食材</div><div class="meta"><span class="d">10-31</span><span class="pill low">低</span></div></div><button class="del">✕</button></div>
+          <div class="task"><span class="check"></span><div class="body"><div class="t">交月度报告初稿</div><div class="meta"><span class="d">10-31</span><span class="pill mid">中</span></div></div><button class="del">✕</button></div>
+        </div>
+        <div class="group">
+          <div class="group-head"><span class="mk soon"></span><h2>即将到来</h2><span class="c">5</span></div>
+          <div class="task"><span class="check"></span><div class="body"><div class="t">预约牙医</div><div class="meta"><span class="d">11-03</span><span class="pill mid">中</span></div></div><button class="del">✕</button></div>
+          <div class="task"><span class="check"></span><div class="body"><div class="t">续签域名</div><div class="meta"><span class="d">11-12</span><span class="pill high">高</span></div></div><button class="del">✕</button></div>
+        </div>
+        <div class="group">
+          <div class="group-head"><span class="mk done"></span><h2>已完成</h2><span class="c">2</span></div>
+          <div class="task done"><span class="check"></span><div class="body"><div class="t">提交本周周报</div><div class="meta"><span class="d">10-30</span><span class="pill mid">中</span></div></div><button class="del">✕</button></div>
+        </div>
+      </section>
+
+      <section class="cal reveal">
+        <div class="cal-head"><span class="m">2026 年 10 月</span><div class="nav"><button>‹</button><button>›</button></div></div>
+        <div class="wd"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+        <div class="grid" id="grid"></div>
+      </section>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var grid=document.getElementById('grid');
+  var dots={28:1,30:1,31:1,3:1,7:1,12:2,15:1,20:1};
+  var off=3;
+  for(var i=0;i<off;i++){var e=document.createElement('div');e.className='day empty';grid.appendChild(e);}
+  for(var d=1;d<=31;d++){var el=document.createElement('div');el.className='day';if(d===31)el.classList.add('today');
+    el.innerHTML=d+(dots[d]?'<span class="dot"></span>':'');
+    el.addEventListener('click',function(){document.querySelectorAll('.day.sel').forEach(function(x){x.classList.remove('sel')});this.classList.add('sel');});
+    grid.appendChild(el);}
+  var seg=document.getElementById('seg');
+  seg.addEventListener('click',function(e){if(e.target.tagName==='BUTTON'){seg.querySelectorAll('button').forEach(function(b){b.classList.remove('on')});e.target.classList.add('on');}});
+  document.querySelectorAll('.task').forEach(function(t){
+    t.querySelector('.check').addEventListener('click',function(){t.classList.toggle('done')});
+    t.querySelector('.del').addEventListener('click',function(){t.remove()});});
+  var ai=document.getElementById('ai'),ab=document.getElementById('ab');
+  function add(){var v=ai.value.trim();if(!v)return;var p=seg.querySelector('.on').dataset.p;
+    var map={high:['high','高'],mid:['mid','中'],low:['low','低']};
+    var g=document.querySelectorAll('.group')[1];var t=document.createElement('div');t.className='task';
+    t.innerHTML='<span class="check"></span><div class="body"><div class="t">'+v+'</div><div class="meta"><span class="d">10-31</span><span class="pill '+map[p][0]+'">'+map[p][1]+'</span></div></div><button class="del">✕</button>';
+    g.insertBefore(t,g.firstChild.nextSibling);
+    t.querySelector('.check').addEventListener('click',function(){t.classList.toggle('done')});
+    t.querySelector('.del').addEventListener('click',function(){t.remove()});ai.value='';ai.focus();}
+  ab.addEventListener('click',add);ai.addEventListener('keydown',function(e){if(e.key==='Enter')add();});
+})();
+</script>
+</body>
+</html>

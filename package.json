@@ -1,0 +1,39 @@
+{
+  "name": "lightframe-worklog",
+  "version": "2.5.0",
+  "description": "桌面任务与日报周报工具",
+  "main": "main.js",
+  "author": "Lightframe",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test src/*.test.js",
+    "icon": "node tools/genicon.js",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.lightframe.worklog",
+    "productName": "光影工作志",
+    "directories": {
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "quick-add.html",
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "assets/icon.png"
+    }
+  }
+}

@@ -1,0 +1,221 @@
+# 实施计划
+
+> 依据 `SPEC.md`。每个任务控制在 2–5 分钟，含精确文件路径与验证方式。
+> 纪律：核心逻辑先写测试（RED），再看它变绿（GREEN）。
+
+## 任务清单
+
+### T1 · 清理旧测试，对齐新模型
+- 删除/重写 `src/taskModel.test.js`：旧版无 `category` / `completedOn`
+- 验证：`node --test src/` 应报 MODULE_NOT_FOUND（RED，因为实现还不存在）
+
+### T2 · 核心模型 `src/taskModel.js`（纯函数，UMD，浏览器/Node 双用）
+- `createTask` / `normalizeTask`（分类必填兜底、优先级兜底 mid、日期格式校验）
+- `todayString`（本地时区）`isOverdue` `isDueToday`
+- `groupTasks` → 逾期 / 今天 / 即将 / 未安排 / 已完成
+- `sortTasks`（优先级→截止日→创建时间）`sortCompleted`（completedAt 倒序）
+- `countsByDate`（月历圆点，只统计未完成）
+- `completeTask`（勾选时写入 `completedAt` + `completedOn`）
+- 验证：`node --test src/` 全绿
+
+### T3 · 报告聚合 `src/report.js` + `src/report.test.js`
+- `buildDaily(tasks, dailyLog, date)` → { groups: {项目: [任务]}, log, text }
+- `buildWeekly(tasks, logs, weekStart)` → 完成清单按项目分组、聚合进展/问题、预填下周计划、统计分布
+- `formatDaily` / `formatWeekly` → 纯文本（供一键复制）
+- 周计算辅助：`isoWeekKey` `weekStartOf`（周一为起始）`weekRangeText`
+- **重点测试**：`completedOn` 跨周边界（上周到期、本周完成 → 计入本周）
+- 验证：`node --test src/` 全绿
+
+### T4 · 持久化 `src/store.js` + `src/store.test.js`
+- `tasks.json` / `dailyLogs.json` / `settings.json` 三个 store
+- 读写容错：文件缺失→`[]`/默认；JSON 损坏→`[]`/默认；脏数据过滤
+- 保存时自动创建父目录
+- 验证：`node --test src/` 全绿（用 `os.tmpdir()` 真实读写）
+
+### T5 · 应用图标 `tools/genicon.js` → `assets/icon.png`
+- 纯 Node 手写最小 PNG 编码器（zlib + CRC32），无二进制依赖
+- 火漆色底 + 白色三条任务线，256×256
+- 验证：文件存在且能被 Electron 加载（`fs.statSync` 非空）
+
+### T6 · 主进程 `main.js`
+- 创建窄窗（约 420×720，最小宽 360），暖纸底色，`preload` 注入
+- 系统托盘（图标 + 右键菜单：显示 / 写日报 / 退出）；关窗最小化到托盘
+- 开机自启 `app.setLoginItemSettings`
+- 全局快捷键 `Ctrl+Shift+Space` 唤起速记框（独立置顶小窗）
+- 提醒定时器：每分钟检查，触发 `Notification`（日报 / 到期），`lastReminded` 防重
+- IPC：`tasks:*` `logs:*` `settings:*` `app:copy` `app:quit`
+- 验证：`node --check main.js` 通过 + 后续实机启动自检
+
+### T7 · 桥接 `preload.js`
+- `contextBridge` 暴露 `window.api`（任务/日志/设置/复制/窗口控制）
+- 验证：`node --check preload.js` 通过
+
+### T8 · 渲染层 `index.html` + `src/styles.css` + `src/renderer.js`
+- 暖纸手账主题（见 SPEC §8 令牌），纸质噪点 + 虚线分隔
+- 顶部三 Tab：任务 / 日报 / 周报
+- 任务 Tab：速记条（标题+分类+优先级+截止日）、五分组列表、迷你月历
+- 日报 Tab：日期切换、自动汇总区、三栏输入（输入即存）、一键复制
+- 周报 Tab：周切换、按项目分组完成清单、聚合进展/问题、下周计划预填、数据概览、一键复制
+- 验证：实机打开三个 Tab 无报错，复制内容符合 SPEC §7 格式
+
+### T9 · 安装依赖与启动验证
+- `npm install`（electron 为 devDependency）
+- `npm start` 实机启动，确认：窗口出现、托盘、快捷键、提醒配置、数据落盘
+- 验证：`node --test src/` 全绿 + 实机冒烟
+
+### T10 · 收尾评审与交付说明
+- 对照 SPEC 逐项自查，按严重度列出残留问题
+- 写 `README.md`：如何运行、如何打包、数据文件位置、快捷键与设置说明
+- 交付给用户
+
+---
+
+## 当前状态
+- [x] 概念设计定稿（B 暖纸手账）
+- [x] grill 会议 → SPEC 定稿
+- [x] T1–T10 全部完成
+
+## 收尾记录（T9 / T10）
+
+依赖与实机：
+- Electron 33.4.11 安装完成，`node --test src/*.test.js` 51/51 通过
+- CDP 冒烟：加任务 → 勾选完成 → 日报/周报聚合 → 复制格式 → 删除落盘，无 console.error
+- 速记小窗：自动聚焦、沿用上次分类、回车经 IPC 落盘、Esc 关闭
+- 冷启动读取既有数据正常；单实例锁生效；便携版 exe 启动即用
+
+评审后修复的缺陷：
+1. `quick-add.html` 的 CSP `script-src 'self'` 拦掉了内联脚本，速记框回车/Esc/分类继承全部失效 → 放开 `unsafe-inline`
+2. SPEC 要求全局键可在设置里改，但 UI 只读且无 IPC → 新增 `app:set-hotkey`，注册失败自动回退默认键并回显
+3. 速记窗 `blur` 立即隐藏，点优先级原生下拉时窗口被藏走 → 改由页面判断，下拉聚焦时不隐藏
+4. 托盘左键无反应 → 单击聚焦/唤起主窗口
+5. 提醒轮询 30s 与 SPEC「每分钟检查」不一致 → 对齐 60s
+
+残留问题按严重度列在 `README.md` 第七节。
+
+---
+
+## v1.1.0 迭代（工程治理 SOP 分步交付）
+
+**战略对齐结论（Step 0）**：用户 4 项需求中，#1（桌面日历形态）、#3（大模型日报）触碰 `SPEC §1` 产品边界，须先定方向再开发。经对齐采用「分批」：
+- 第一批（v1.1.0，本轮）：#2 任务详细编辑 + #4 小细节（确定性高）
+- Next-Version：#1 半透明挂件、#3 离线启发式日报（已定方向，不在本期）
+
+**已交付（TDD 红→绿）**：
+- 新增纯模块 `src/editor.js`（UMD）+ `src/editor.test.js`：`autoBulletOnEnter` / `cleanDetails`
+- `taskModel` 增加 `details` 字段与不可变 `updateTask`，并补单测
+- 渲染层：`buildTaskRow` 加详情预览与「✎」编辑按钮；新增任务详情弹窗与实时时钟
+- 单测由 51 → 60 全绿
+- CDP 实机冒烟：无截止日创建、详情编辑+换行自动圆点+落盘、重新打开回填、时钟格式、删除清理，均无 console.error
+
+**Next-Version 已对齐方向（记入 SPEC §11，禁止本期顺手塞入）**：
+- #1 整窗变半透明挂件（置顶/可拖拽/半透明可调/月历为主）
+- #3 内置启发式离线日报生成
+
+**版本**：`package.json` 1.0.0 → 1.1.0；新增 `CHANGELOG.md`
+
+---
+
+## v2.0.0 迭代（桌面挂件形态 · Major）
+
+**战略对齐结论（Step 0 已定）**：#1 采用「整窗变半透明挂件」方向；三 Tab 折叠进面板（点头像/标题区展开）；鼠标穿透默认开启。
+
+**已交付（TDD 红→绿 + 实机 CDP 冒烟）**：
+- `taskModel` 新增纯函数 `monthGrid`（42 格网格，跨月/跨年补位），单测覆盖
+- `store.js` / `renderer.js` 的 `DEFAULT_SETTINGS` + `mergeSettings` 增加 `widget` 配置块；`store` 单测同步
+- `main.js`：窗口 `transparent + frame:false + alwaysOnTop + skipTaskbar`，应用保存的 `rect`；`moved` 持久化位置；新增 IPC `widget:setExpanded` 调整窗口高度
+- `preload.js` 暴露 `setWidgetExpanded`；`index.html` 加 `#w-handle` / `#w-body`（迷你月历 + 今日任务）并包裹原三 Tab 为 `#w-panel`
+- `renderer.js`：挂件渲染（时钟/月历/今日）、展开折叠、穿透切换、双击某天新建草稿、双击任务编辑；`openEditor/closeEditor` 支持草稿态（取消未填则丢弃）
+- `styles.css`：玻璃拟态、`-webkit-app-region` 拖拽、`ct-mode` 穿透、折叠/展开、月历与今日列表样式
+- 单测 60 → 63 全绿；CDP 实机确认：手柄/42 格月历/默认穿透+折叠/实时时钟/今日列表填充/展开与穿透切换/无 console.error
+- 修复：`openNewTask` 在 `openEditor` 之后置 `data-new`，否则标记被清掉
+
+**仍属 Next-Version（未做）**：
+- #3 大模型/离线启发式日报生成
+
+**版本**：`package.json` 1.1.0 → 2.0.0；设计稿 `design/widget-design.md` + 原型 `design/widget-preview.html`
+
+---
+
+## v2.1.0 迭代（#3 日报智能摘要 · 离线启发式）
+
+**战略对齐结论**：#3 原意为「大模型日报生成」，但触碰「不做云同步」边界。经对齐采用**内置启发式（离线）**：以「已完成任务 + 日志」确定性拼装摘要，不联网、零依赖、可复现。
+
+**已交付（TDD 红→绿）**：
+- `report.js` 新增纯函数 `buildDailySummary` / `buildWeeklySummary`，单测覆盖空态 / 计数聚合 / 高优先级点名 / 日志拼接 / 多类目收敛 / 周报疑点统计
+- 日报/周报新增「智能摘要（自动生成）」卡片，实时跟随刷新
+- 一键复制文本开头自动带上启发式摘要段落
+- 单测由 63 → 68 全绿
+- CDP 实机冒烟：创建并完成任务后，日报/周报摘要均正确生成、清理无残留、无 console.error
+
+**版本**：`package.json` 2.0.0 → 2.1.0
+
+**原始 4 项需求全部交付**：#2 任务详情编辑（v1.1.0）、#4 小细节（v1.1.0）、#1 桌面挂件（v2.0.0）、#3 离线启发式日报（v2.1.0）。
+
+---
+
+## v2.2.0 迭代（挂件交互与可达性修复）
+
+**战略对齐结论**：基于 brainstorming + frontend-design 复盘，用户反馈三大痛点（无最小化/关闭、收起态月历应只显示本周、挂件内出现两套月历）及若干 UX 隐患（双重标题栏、周起始不一致、穿透默认沉默、无复位入口）。设计冻结为：手柄成为唯一控制栏 + 单一月历 + 收起=本周/展开=整月。
+
+**已交付**：
+- `main.js`：新增 `widget:resetPosition` IPC（居中并清空 `widget.rect`）；复用已有 `window:hide` / `app:quit`；`preload` 暴露 `resetWidgetPosition`
+- `index.html`：手柄新增「隐藏到托盘」「退出」按钮；删除面板内冗余 `app-head`；移除「任务」Tab 重复月历；周起始改周一；列表标题改为动态 `w-todayLabel`；设置新增「复位挂件位置」
+- `renderer.js`：移除 `app-head`/`btn-pin`/`cal-*` 引用与事件；`renderWidgetCalendar` 支持收起=本周单行(Mon-first)/展开=整月(Mon-first)，点击就地切列表（收起态）或筛选任务Tab（展开态），双击新建；`renderWidgetToday` 按 `state.viewDay` 展示并动态标题；穿透二态图标；`w-prev/w-next` 按展开态切周/月；`w-hide/w-quit/set-reset-pos` 绑定
+- `styles.css`：补 `.w-dot` 圆点与 `.w-cell.sel` 选中态（修复圆点不显示）
+- 单测维持 68 全绿；CDP 实机冒烟 11 项断言全 PASS（干净 profile）：手柄5按钮、无 app-head、单月历、周一起始、默认收起、收起=7格、点日期就地切列表且面板仍收起、展开=42格、标题含年月、复位 toast、无 console.error
+
+**版本**：`package.json` 2.1.0 → 2.2.0
+
+---
+
+## v2.3.0 迭代（前端口碑评审修复 P0/P1/P2）
+
+**战略对齐结论**：基于 `frontend-design` 对真实 DOM/样式/交互路径的完整评审，确认 4 个体验阻断项（默认穿透导致首屏不可交互、退出无确认、穿透态冻面板、上下文断裂）与 5 项视觉/一致性问题（两套材质、约 170 行死 CSS、周格过高、中文字体跨平台失配、隐藏无反馈/无回今天入口）。按 P0→P1→P2 顺序落地。
+
+**已交付**：
+- P0-#1 `store.js`/`renderer.js`：`widget.clickThrough` 默认改为 `false`；若启动即为穿透态，给一次 toast 提示
+- P0-#2 `renderer.js`：手柄 ✕ 与设置「退出应用」加 `window.confirm` 二次确认
+- P0-#4 `styles.css`：`body.ct-mode` 仅冻结 `.w-body`，`#w-panel` 保持 `pointer-events:auto`
+- P1-#3 `renderer.js`：`toggleExpand` 展开时把 `viewDay` 同步为「任务」Tab 筛选并切 Tab
+- P1-#5 `styles.css`：`.w-task` 复用面板 `.task` 的纸片 token（白底/描边/阴影/hover 抬升）
+- P1-#6 `styles.css`：删除 `app-head`/`seal`/`head-date`/`head-actions`/`head-clock`、旧 `cal-*`/`day`、`.w-cell.has::after`，重写窄屏媒体查询
+- P2-#7 `styles.css`：`body:not(.expanded) .w-cell { height:30px }`，收起态周格收矮
+- P2-#8 `styles.css`：`--display` 补 `Noto Serif SC/STSong/SimSun`，`--body` 补 `Hiragino Sans GB`
+- P2-#12 `renderer.js`：隐藏到托盘后 toast 提示（托盘菜单已含 显示/今天日报/退出）
+- P2-#13 `index.html`/`renderer.js`/`styles.css`：月历新增「今天」按钮（展开回本月、收起回本周，并选中今天）
+- 单测 68 全绿（同步更新 `store.test.js` 的默认 `clickThrough:false` 期望）；CDP 实机冒烟 23/23 PASS（干净 profile）：默认不穿透、手柄 6 控件、收起 7 格且高 30px、`--display` 含中文字体、展开 42 格、穿透态面板仍可点、今天按钮复位、无 console.error
+
+**版本**：`package.json` 2.2.0 → 2.3.0
+
+---
+
+## v2.4.0 迭代（任务优先布局）
+
+**用户反馈**：界面顶部一大块全是日历，不是主要信息；真正主要的「创建任务」反而被压在日历下面，布局不友好。
+
+**战略对齐结论**：桌面挂件的首要任务是「记一笔 + 看今天该做什么」，日历是辅助上下文。设计冻结为：速记条全局置顶 → 任务列表 → 周导航（收起）/ 面板 + 月历参考卡（展开）。
+
+**已交付**：
+- `index.html`：`#quickadd` 从 `#view-task` 移到手柄下方 `.w-compose`（全局置顶，收起/展开都在）；挂件主区改为「任务列表 → 月历」；`#view-task` 底部新增 `#panel-cal-slot`
+- `renderer.js`：`toggleExpand` 在展开时把 `#w-cal` 移入 `#panel-cal-slot`、收起时移回 `#w-body`；`init` 以展开态启动时同样归位；`handleAdd` 收起态未填日期默认记到 `viewDay`
+- `styles.css`：`.w-compose` 顶部速记容器；`body.expanded .w-body` 隐藏主区；`.panel-cal-slot .w-cal` 变为底部「月历 · 参考」卡片；主区 `flex:1` + 列表 `flex:1` 让周导航贴底；速记条内收紧内边距、隐藏次要提示
+- 单测 68 全绿；`node --check` 通过；结构校验：`#quickadd`/`#w-cal` 各唯一、速记在 `#w-body` 之前、列表在月历之前
+- 说明：本次实机 CDP 冒烟命令多次等待授权超时未执行，逻辑正确性以单测 + 静态结构校验 + 代码审读确认
+
+**版本**：`package.json` 2.3.0 → 2.4.0
+
+---
+
+## v2.5.0 迭代（月历对齐修复 + 密度 B）
+
+**用户反馈**：① 11/01 应单独归位（首行末尾），当前却排在 11/02–11/06 之后；② 月历整体过高，希望行高更低；③ 顺带排查其它问题；④ 先出示例挑选。
+
+**做法**：
+- 先出 4 个密度示例（`design/calendar-options.html`，本地预览 http://127.0.0.1:8777/design/calendar-options.html），用户选 **B（32px 紧凑矩形）**。
+- **错位根因**：`TM.monthGrid` 为周日起，渲染层 `monthCellsMonFirst` 用「每行把第 0 格挪末位」硬转周一；`startDow=0` 的月份（1 号为周日）首行会被排成 `2 3 4 5 6 7 1`。新增 `TM.monthGridMon()` 按周一为首直接生成，渲染层改用它，删除行内旋转。
+- 一并修复：展开态 `sel` 改用 `filterDate`；灰格点击自动跳月；`syncQuickDate()` 让速记日期框跟随 `viewDay`；`#panel-cal-slot` 移到 `.app-main` 底部使月历常驻；日历格补 `aria-label`。
+- 密度 B：`.w-cell { height:32px }`（移除 `aspect-ratio:1/1` 与收起态 30px 特例），收起/展开统一。
+
+**验证**：单测 70/70（新增 2 条 `monthGridMon` 用例锁定 11/1 归位与「1 号为周一」）；`node --check` 通过；前缀示例页 4 方案已生成。说明：本轮实机 CDP 冒烟命令两次等待授权超时未执行。
+
+**版本**：`package.json` 2.4.0 → 2.5.0

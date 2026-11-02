@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>月历密度 · 方案对比</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Karla:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f3ece0;
+    --paper-2: #efe6d6;
+    --paper-3: #fffaf2;
+    --ink: #2c2620;
+    --ink-soft: #6f6657;
+    --ink-faint: #b9ab92;
+    --line: #d8ccb6;
+    --line-soft: #e6dbc7;
+    --accent: #c2613f;
+    --accent-deep: #b4553a;
+    --accent-tint: rgba(194, 97, 63, .1);
+    --display: "Fraunces", "Noto Serif SC", "Songti SC", "STSong", "SimSun", Georgia, serif;
+    --body: "Karla", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    padding: 34px 22px 60px;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* 纸质噪点 */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    opacity: .4; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  }
+  .wrap { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }
+
+  header.page { margin-bottom: 24px; }
+  .kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  h1 {
+    margin: 6px 0 8px;
+    font-family: var(--display); font-size: 30px; font-weight: 600;
+    letter-spacing: -.01em;
+  }
+  .lede { margin: 0; max-width: 720px; color: var(--ink-soft); font-size: 14px; line-height: 1.7; }
+
+  .callout {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin: 18px 0 26px; padding: 12px 15px;
+    background: var(--paper-3); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 12px; box-shadow: 0 1px 0 rgba(140,120,90,.06);
+    font-size: 13px; color: var(--ink-soft);
+  }
+  .callout b { color: var(--ink); font-weight: 700; }
+  .callout .mini {
+    font-family: var(--mono); font-size: 11px; color: var(--accent-deep);
+    background: var(--accent-tint); padding: 2px 8px; border-radius: 999px;
+  }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 18px; align-items: start;
+  }
+
+  .card {
+    position: relative;
+    background: var(--paper-3);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 1px 0 rgba(140,120,90,.06), 0 8px 22px rgba(140,120,90,.1);
+    padding: 16px 16px 18px;
+  }
+  .card h2 {
+    margin: 0; display: flex; align-items: center; gap: 8px;
+    font-family: var(--display); font-size: 16px; font-weight: 600;
+  }
+  .card .tag {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .04em;
+    color: var(--ink-soft); background: var(--paper-2);
+    border: 1px solid var(--line-soft); border-radius: 999px; padding: 1px 7px;
+  }
+  .card .rec {
+    color: #fff; background: var(--accent); border-color: var(--accent);
+  }
+  .card p.desc {
+    margin: 6px 0 12px; font-size: 12px; line-height: 1.6; color: var(--ink-soft);
+    min-height: 38px;
+  }
+
+  /* ---- 月历通用 ---- */
+  .cal { margin-top: 2px; }
+  .cal-title {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    margin-bottom: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--ink);
+    letter-spacing: .02em;
+  }
+  .cal-title .arrow { color: var(--ink-faint); }
+  .cal-week {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
+    margin-bottom: 3px;
+  }
+  .cal-week span {
+    font-family: var(--mono); font-size: 9.5px; color: var(--ink-faint);
+    text-align: center; padding: 2px 0;
+  }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cell {
+    position: relative; display: grid; place-items: center;
+    border: none; background: transparent; color: var(--ink);
+    border-radius: 7px; cursor: pointer; font-variant-numeric: tabular-nums;
+    transition: background .15s, color .15s, transform .12s;
+  }
+  .cell.muted { color: var(--ink-faint); opacity: .5; }
+  .cell.nov1 { color: var(--accent-deep); font-weight: 700; }
+  .cell:hover { background: #f0e4d2; }
+  .cell.today { background: var(--accent); color: #fff; font-weight: 700; box-shadow: 0 2px 6px rgba(194,97,63,.3); }
+  .cell.today:hover { background: var(--accent-deep); }
+  .cell .dot {
+    position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%);
+    width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+  }
+  .cell.today .dot { background: #fff; }
+
+  /* A · 当前线上：正方形（1:1） */
+  .cal-a .cell { aspect-ratio: 1 / 1; font-size: 12px; }
+  /* B · 紧凑矩形 32 */
+  .cal-b .cell { height: 32px; font-size: 12px; }
+  /* C · 更紧凑 26 */
+  .cal-c .cell { height: 26px; font-size: 11.5px; border-radius: 6px; }
+  .cal-c .cell .dot { bottom: 2px; }
+  /* D · 极简日期条 22 */
+  .cal-d .cell { height: 22px; font-size: 11px; border-radius: 5px; }
+  .cal-d .cell .dot { width: 3px; height: 3px; bottom: 2px; }
+  .cal-d .cal-week span { font-size: 9px; }
+
+  .badge-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .chip {
+    font-family: var(--mono); font-size: 10px; color: var(--ink-soft);
+    background: var(--paper-2); border: 1px solid var(--line-soft);
+    border-radius: 999px; padding: 2px 8px;
+  }
+  .foot-note {
+    margin-top: 26px; padding-top: 16px; border-top: 1px dashed var(--line);
+    font-size: 12px; line-height: 1.7; color: var(--ink-soft);
+  }
+  .foot-note b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <div class="kicker">光影工作志 · 月历密度方案</div>
+    <h1>四个示例，挑一个你顺眼的</h1>
+    <p class="lede">
+      下面四个都是同一份 2026 年 11 月数据，只改「行高 / 字号 / 圆角」。四种都已修正对齐：
+      11 月 1 日是周日，所以首行应该是 <b>10/26–10/31 + 11/01</b>，11/02 另起一行。
+    </p>
+  </header>
+
+  <div class="callout">
+    <span class="mini">对齐已修复</span>
+    <span>首行 = 10/26 一 · 10/27 二 · 10/28 三 · 10/29 四 · 10/30 五 · 10/31 六 · <b>11/01 日</b></span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="foot-note">
+    <b>说明：</b>橙色实心格是「今天（11/01）」；带小圆点的日子表示当天有任务。
+    选好后告诉我编号（A/B/C/D），我把它落到挂件里；也可以混搭，比如「行高用 B、圆点用 C」。
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var YEAR = 2026, MONTH = 11;
+  var TODAY = '2026-11-01';
+  var WITH_TASKS = ['2026-11-05', '2026-11-12', '2026-11-20'];
+  var WEEK = ['一', '二', '三', '四', '五', '六', '日'];
+
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+
+  // 周一为首的 42 格（与 taskModel.monthGridMon 同算法）
+  function monthGridMon(year, month) {
+    var first = new Date(year, month - 1, 1);
+    var startDow = (first.getDay() + 6) % 7; // 0=周一
+    var daysInMonth = new Date(year, month, 0).getDate();
+    var prevDays = new Date(year, month - 1, 0).getDate();
+    var cells = [];
+    for (var i = 0; i < 42; i++) {
+      var d, m, y, inMonth;
+      if (i < startDow) {
+        d = prevDays - startDow + 1 + i; m = month - 1; y = year;
+        if (m < 1) { m = 12; y = year - 1; }
+        inMonth = false;
+      } else if (i >= startDow + daysInMonth) {
+        d = i - (startDow + daysInMonth) + 1; m = month + 1; y = year;
+        if (m > 12) { m = 1; y = year + 1; }
+        inMonth = false;
+      } else {
+        d = i - startDow + 1; m = month; y = year;
+        inMonth = true;
+      }
+      cells.push({
+        day: d,
+        dateStr: y + '-' + pad2(m) + '-' + pad2(d),
+        inMonth: inMonth
+      });
+    }
+    return cells;
+  }
+
+  var OPTIONS = [
+    { key: 'a', name: 'A · 当前线上', desc: '正方形格（1:1），最「日历本」但也最高。留作对照。', tags: ['约 46px 行高', '6 行 ≈ 280px'] },
+    { key: 'b', name: 'B · 紧凑矩形', desc: '行高压到 32px，格子略扁；信息密度和呼吸感最平衡。', tags: ['32px 行高', '6 行 ≈ 210px'], rec: true },
+    { key: 'c', name: 'C · 更紧凑', desc: '26px 行高、圆角略小，像一条条「日期带」，适合挂件贴身。', tags: ['26px 行高', '6 行 ≈ 174px'] },
+    { key: 'd', name: 'D · 极简日期条', desc: '22px、去掉厚重感，只留数字和一个小圆点，最不抢戏。', tags: ['22px 行高', '6 行 ≈ 150px'] }
+  ];
+
+  var gridEl = document.getElementById('grid');
+  var cells = monthGridMon(YEAR, MONTH);
+
+  OPTIONS.forEach(function (opt) {
+    var card = document.createElement('section');
+    card.className = 'card';
+
+    var h2 = document.createElement('h2');
+    h2.textContent = opt.name;
+    var tag = document.createElement('span');
+    tag.className = 'tag' + (opt.rec ? ' rec' : '');
+    tag.textContent = opt.rec ? '推荐' : opt.key.toUpperCase();
+    h2.appendChild(tag);
+    card.appendChild(h2);
+
+    var p = document.createElement('p');
+    p.className = 'desc';
+    p.textContent = opt.desc;
+    card.appendChild(p);
+
+    var cal = document.createElement('div');
+    cal.className = 'cal cal-' + opt.key;
+
+    var title = document.createElement('div');
+    title.className = 'cal-title';
+    title.innerHTML = '<span class="arrow">‹</span><span>' + YEAR + ' 年 ' + MONTH + ' 月</span><span class="arrow">›</span>';
+    cal.appendChild(title);
+
+    var week = document.createElement('div');
+    week.className = 'cal-week';
+    WEEK.forEach(function (w) { var s = document.createElement('span'); s.textContent = w; week.appendChild(s); });
+    cal.appendChild(week);
+
+    var g = document.createElement('div');
+    g.className = 'cal-grid';
+    cells.forEach(function (c) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cell' + (c.inMonth ? '' : ' muted') + (c.dateStr === TODAY ? ' today' : '') + (c.dateStr === '2026-11-01' ? ' nov1' : '');
+      b.textContent = c.day;
+      if (WITH_TASKS.indexOf(c.dateStr) >= 0) {
+        var dot = document.createElement('span');
+        dot.className = 'dot';
+        b.appendChild(dot);
+      }
+      g.appendChild(b);
+    });
+    cal.appendChild(g);
+    card.appendChild(cal);
+
+    var badgeRow = document.createElement('div');
+    badgeRow.className = 'badge-row';
+    opt.tags.forEach(function (t) { var chip = document.createElement('span'); chip.className = 'chip'; chip.textContent = t; badgeRow.appendChild(chip); });
+    card.appendChild(badgeRow);
+
+    gridEl.appendChild(card);
+  });
+})();
+</script>
+</body>
+</html>
