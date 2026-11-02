@@ -789,8 +789,6 @@
   async function toggleExpand() {
     var next = !state.settings.widget.expanded;
     state.settings.widget.expanded = next;
-    // 展开时关闭穿透（方便操作），折叠时恢复穿透（回归桌面壁纸感）
-    state.settings.widget.clickThrough = !next;
     if (!next) state.weekAnchor = state.viewDay || state.today;
     // 展开：月历下沉到面板底部（任务列表之后），避免大月历压顶
     if (D['w-cal']) {
@@ -1150,6 +1148,10 @@
     D['set-launch'].checked = !!settings.launchAtLogin;
     D['set-tray'].checked = !!settings.closeToTray;
     D['set-hotkey'].value = settings.hotkey || 'Ctrl+Shift+Space';
+    if (D['set-opacity']) {
+      D['set-opacity'].value = settings.widget.opacity;
+      if (D['set-opacity-val']) D['set-opacity-val'].textContent = Math.round(settings.widget.opacity * 100) + '%';
+    }
     renderAccountArea();
   }
 
@@ -1432,6 +1434,18 @@
     D['set-tray'].addEventListener('change', function () {
       patchSettings({ closeToTray: this.checked });
     });
+    if (D['set-opacity']) {
+      D['set-opacity'].addEventListener('input', function () {
+        var v = parseFloat(this.value);
+        if (!(v > 0)) v = 0.55;
+        state.settings.widget.opacity = v;
+        if (D['set-opacity-val']) D['set-opacity-val'].textContent = Math.round(v * 100) + '%';
+        applyWidgetStyle();
+      });
+      D['set-opacity'].addEventListener('change', function () {
+        apiCall('saveSettings', null, state.settings);
+      });
+    }
     var hotkeyInput = D['set-hotkey'];
     hotkeyInput.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') {
@@ -1495,7 +1509,7 @@
       'w-handle', 'w-clock', 'w-ct', 'w-expand', 'w-hide', 'w-quit', 'w-settings',
       'w-body', 'w-cal', 'panel-cal-slot', 'w-calTitle', 'w-prev', 'w-next', 'w-today', 'w-cal-grid', 'w-todayLabel',
       'w-todayCount', 'w-tlist', 'w-panel',
-      'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'btn-quit', 'toast',
+      'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'set-opacity', 'set-opacity-val', 'btn-quit', 'toast',
       'w-sync',
       'acc-block', 'acc-server', 'acc-status', 'acc-form', 'acc-email', 'acc-password',
       'acc-confirm', 'acc-confirm-row', 'acc-submit', 'acc-toggle', 'acc-forgot',
