@@ -116,6 +116,11 @@ function createMainWindow() {
   mainWindow.loadFile('index.html');
   mainWindow.setAlwaysOnTop(true);
 
+  // 2.5.1：启动时若上次处于穿透态，恢复 OS 级鼠标穿透
+  if (settings && settings.widget && settings.widget.clickThrough) {
+    try { mainWindow.setIgnoreMouseEvents(true, { forward: true }); } catch (err) { /* 忽略 */ }
+  }
+
   // 位置变化后落盘，下次启动回到原位
   mainWindow.on('moved', function () {
     if (!mainWindow || mainWindow.isDestroyed() || !settings.widget) return;
@@ -329,54 +334,46 @@ function completedCountOn(dateStr) {
 function checkReminders() {
   if (!ready) return;
 
+  // 2.5.1：合并为单条「每日待办」，仅 17:00–21:59 每小时提醒一次，22:00 后停
+  const now = new Date();
+  const hour = now.getHours();
+  if (hour < 17 || hour >= 22) return;
+
   const today = todayString();
-  const hhmm = hhmmString();
-  const lastReminded = settings.lastReminded || (settings.lastReminded = { daily: null, due: null });
-  const dirty = { value: false };
+  const hourKey = today + '-' + String(hour);
+  const last = settings.lastReminded || (settings.lastReminded = {});
+  if (last.todoHour === hourKey) return; // 同一小时只提醒一次
 
-  // 日报提醒
-  const dailyCfg = settings.dailyReminder || {};
-  if (dailyCfg.enabled && typeof dailyCfg.at === 'string' && hhmm >= dailyCfg.at && lastReminded.daily !== today) {
-    const log = logsCache[today];
-    const blank = !log ||
-      (!String(log.progress || '').trim() &&
-        !String(log.issues || '').trim() &&
-        !String(log.plan || '').trim());
-    if (blank) {
-      const n = completedCountOn(today);
-      notify('该写日报了', '今天完成了 ' + n + ' 项，花一分钟记一下');
+  const log = logsCache[today];
+  const logBlank = !log ||
+    (!String(log.progress || '').trim() &&
+      !String(log.issues || '').trim() &&
+      !String(log.plan || '').trim());
+
+  let dueToday = 0;
+  let highDue = 0;
+  let overdue = 0;
+  tasksCache.forEach(function (task) {
+    if (!task || task.done || task.deletedAt) return;
+    if (typeof task.dueDate !== 'string') return;
+    if (task.dueDate === today) {
+      dueToday += 1;
+      if (task.priority === 'high') highDue += 1;
+    } else if (task.dueDate < today) {
+      overdue += 1;
     }
-    lastReminded.daily = today;
-    dirty.value = true;
-  }
+  });
 
-  // 到期 / 逾期提醒
-  const dueCfg = settings.dueReminder || {};
-  if (dueCfg.enabled && typeof dueCfg.at === 'string' && hhmm >= dueCfg.at && lastReminded.due !== today) {
-    let dueToday = 0;
-    let highDue = 0;
-    let overdue = 0;
-    tasksCache.forEach(function (task) {
-      if (!task || task.done) return;
-      if (typeof task.dueDate !== 'string') return;
-      if (task.dueDate === today) {
-        dueToday += 1;
-        if (task.priority === 'high') highDue += 1;
-      } else if (task.dueDate < today) {
-        overdue += 1;
-      }
-    });
+  if (logBlank || dueToday + overdue > 0) {
+    const parts = [];
     if (dueToday + overdue > 0) {
-      notify(
-        '今日待办提醒',
-        '今日到期 ' + dueToday + ' 项（高优先级 ' + highDue + ' 项），另有 ' + overdue + ' 项已逾期'
-      );
+      parts.push('今日到期 ' + dueToday + ' 项（高优 ' + highDue + '），逾期 ' + overdue + ' 项');
     }
-    lastReminded.due = today;
-    dirty.value = true;
+    if (logBlank) parts.push('日报还没写');
+    notify('每日待办提醒', parts.join('；'));
+    last.todoHour = hourKey;
+    persistSettings();
   }
-
-  if (dirty.value) persistSettings();
 }
 
 // ---------- IPC ----------
@@ -493,25 +490,39 @@ function registerIpc() {
     return true;
   });
 
-  // 挂件折叠 / 展开：调整窗口高度
-  ipcMain.handle('widget:setExpanded', function (_event, expanded) {
-    if (!mainWindow || mainWindow.isDestroyed()) return false;
-    const size = expanded ? WIDGET_SIZE.expanded : WIDGET_SIZE.collapsed;
-    const [w] = mainWindow.getSize();
-    try { mainWindow.setSize(w, size.height, true); } catch (err) { /* 忽略 */ }
+  // 挂件折叠 / 展开：高度改由渲染端按内容自适应（widget:setHeight），此处仅作兼容空操作
+  ipcMain.handle('widget:setExpanded', function () {
     return true;
   });
 
-  // 复位挂件位置：居中并清空保存的坐标
+  // 2.5.1：OS 级鼠标穿透（forward 让页面仍能收到鼠标事件，用于命中手柄/按钮时临时恢复）
+  ipcMain.handle('widget:setClickThrough', function (_event, flag) {
+    if (!mainWindow || mainWindow.isDestroyed()) return false;
+    try { mainWindow.setIgnoreMouseEvents(!!flag, { forward: true }); } catch (err) { /* 忽略 */ }
+    return true;
+  });
+
+  // 2.5.1：按内容高度自适应窗口（绕过 resizable:false 限制）
+  ipcMain.handle('widget:setHeight', function (_event, h) {
+    if (!mainWindow || mainWindow.isDestroyed()) return false;
+    const height = Math.max(360, Math.min(820, Math.round(Number(h) || 360)));
+    const [w] = mainWindow.getSize();
+    try {
+      mainWindow.setResizable(true);
+      mainWindow.setSize(w, height, false);
+      mainWindow.setResizable(false);
+    } catch (err) { /* 忽略 */ }
+    return true;
+  });
+
+  // 复位挂件位置：居中并清空保存的坐标（高度由渲染端自适应，这里保留当前高度）
   ipcMain.handle('widget:resetPosition', function () {
     if (!mainWindow || mainWindow.isDestroyed()) return false;
-    const size = (settings && settings.widget && settings.widget.expanded)
-      ? WIDGET_SIZE.expanded
-      : WIDGET_SIZE.collapsed;
+    const [w, h] = mainWindow.getSize();
     const area = screen.getPrimaryDisplay().workAreaSize;
-    const x = Math.max(0, Math.round((area.width - size.width) / 2));
-    const y = Math.max(0, Math.round((area.height - size.height) / 2));
-    try { mainWindow.setBounds({ x: x, y: y, width: size.width, height: size.height }); } catch (err) { /* 忽略 */ }
+    const x = Math.max(0, Math.round((area.width - w) / 2));
+    const y = Math.max(0, Math.round((area.height - h) / 2));
+    try { mainWindow.setBounds({ x: x, y: y, width: w, height: h }); } catch (err) { /* 忽略 */ }
     if (settings && settings.widget) {
       settings.widget.rect = null;
       persistSettings();

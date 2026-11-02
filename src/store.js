@@ -18,7 +18,7 @@ const DEFAULT_SETTINGS = {
   lastReminded: { daily: null, due: null },
   weeklyPlans: {},
   widget: {
-    opacity: 0.9,
+    opacity: 0.55,
     blur: 14,
     clickThrough: false,
     expanded: false,

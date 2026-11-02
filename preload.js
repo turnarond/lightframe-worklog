@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('api', {
   setLaunchAtLogin: function (value) { return ipcRenderer.invoke('app:set-launch-at-login', value); },
   setHotkey: function (value) { return ipcRenderer.invoke('app:set-hotkey', value); },
   setWidgetExpanded: function (expanded) { return ipcRenderer.invoke('widget:setExpanded', expanded); },
+  setClickThrough: function (flag) { return ipcRenderer.invoke('widget:setClickThrough', flag); },
+  setHeight: function (h) { return ipcRenderer.invoke('widget:setHeight', h); },
   resetWidgetPosition: function () { return ipcRenderer.invoke('widget:resetPosition'); },
   notifyRefresh: function () { return ipcRenderer.invoke('app:refresh'); },
 

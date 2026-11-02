@@ -779,6 +779,7 @@
   function renderWidget() {
     renderWidgetCalendar();
     renderWidgetToday();
+    fitWidgetHeight();
   }
 
   // 透明/模糊/穿透/展开 的视觉应用
@@ -810,6 +811,7 @@
     }
     D['w-panel'].hidden = !next;
     applyWidgetStyle();
+    applyClickThrough(state.settings.widget.clickThrough);
     if (next) { if (D['qa-date']) D['qa-date'].value = ''; }
     else syncQuickDate();
     renderWidget();
@@ -828,7 +830,47 @@
     var next = !state.settings.widget.clickThrough;
     state.settings.widget.clickThrough = next;
     applyWidgetStyle();
+    applyClickThrough(next);
     await apiCall('saveSettings', null, state.settings);
+  }
+
+  // 2.5.1：OS 级鼠标穿透 + 命中手柄/按钮时临时恢复可交互
+  var ctOsActive = false;
+  var ctMoveHandler = null;
+  function applyClickThrough(flag) {
+    if (typeof bridge.setClickThrough !== 'function') return;
+    if (ctMoveHandler) {
+      document.removeEventListener('mousemove', ctMoveHandler, true);
+      ctMoveHandler = null;
+    }
+    if (flag) {
+      ctOsActive = true;
+      bridge.setClickThrough(true);
+      ctMoveHandler = function (e) {
+        var interactive = e.target && e.target.closest &&
+          e.target.closest('.w-handle, button, .modal, input, textarea, a[href], [role="button"]');
+        var wantOs = !interactive; // 命中可交互元素则临时关闭穿透
+        if (wantOs !== ctOsActive) {
+          ctOsActive = wantOs;
+          bridge.setClickThrough(wantOs);
+        }
+      };
+      document.addEventListener('mousemove', ctMoveHandler, true);
+    } else {
+      ctOsActive = false;
+      bridge.setClickThrough(false);
+    }
+  }
+
+  // 2.5.1：按内容高度自适应窗口（临时放开 body 高度量出真实内容高度）
+  function fitWidgetHeight() {
+    if (typeof bridge.setHeight !== 'function' || !document.body) return;
+    var body = document.body;
+    var prev = body.style.height;
+    body.style.height = 'auto';
+    var h = body.scrollHeight;
+    body.style.height = prev;
+    if (h > 0) bridge.setHeight(h);
   }
 
   // 以某天为截止日新建任务（草稿态，取消且未填写则丢弃）
@@ -1592,6 +1634,7 @@
 
     // 桌面挂件：应用形态（透明/穿透/折叠）+ 初次渲染迷你月历与今日任务
     applyWidgetStyle();
+    applyClickThrough(state.settings.widget.clickThrough);
     D['w-panel'].hidden = !state.settings.widget.expanded;
     // 若以展开态启动，月历应已在面板底部，避免被隐藏的挂件主区带走
     if (state.settings.widget.expanded && D['w-cal'] && D['panel-cal-slot']) {
