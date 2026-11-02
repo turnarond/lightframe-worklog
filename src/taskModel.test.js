@@ -305,3 +305,13 @@ test('formatDateCN: 短中文日期', () => {
   assert.equal(M.formatDateCN(null), '');
   assert.equal(M.formatDateCN('乱码'), '');
 });
+
+test('deleteTask: 软删同时 bump updatedAt（使删除作为一次更新参与 LWW 同步）', () => {
+  const list = [M.createTask({ title: 'a' })];
+  const before = list[0].updatedAt;
+  const out = M.deleteTask(list, list[0].id);
+  assert.ok(out[0].deletedAt > 0, '置 deletedAt');
+  assert.ok(out[0].updatedAt >= before, 'updatedAt 不回退');
+  assert.ok(out[0].updatedAt >= out[0].deletedAt, 'updatedAt 与 deletedAt 同步');
+  assert.equal(list[0].deletedAt, null, '原数组不被改动');
+});

@@ -224,6 +224,15 @@ test('deleteTask: 软删——保留对象并置数字 deletedAt', () => {
   assert.equal(list[0].deletedAt, null, '原数组不被改动');
 });
 
+test('任务 store: 软删墓碑 save→load 保留 deletedAt（同步删除跨端传播）', async () => {
+  const file = path.join(tmpDir(), 'tasks.json');
+  const store = S.createTaskStore(file);
+  await store.save([{ id: 'k1', title: 'x', updatedAt: 100, deletedAt: 200 }]);
+  const [t] = await store.load();
+  assert.equal(t.deletedAt, 200, '墓碑 deletedAt 被持久化');
+  assert.equal(t.updatedAt, 100);
+});
+
 test('SyncMeta store: 默认值 + 持久化往返', async () => {
   const file = path.join(tmpDir(), 'syncmeta.json');
   const store = S.createSyncMetaStore(file);

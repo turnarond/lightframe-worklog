@@ -151,13 +151,17 @@
   }
 
   /**
-   * 软删：不移除对象，仅置 deletedAt（毫秒时间戳），用于同步删除。
+   * 软删：不移除对象，仅置 deletedAt（毫秒时间戳）；同时 bump updatedAt，
+   * 这样删除作为一次「更新」参与 LWW，能被正确推送到云端并在多端传播。
    * 返回新数组，原数组不被改动。
    */
   function deleteTask(tasks, id) {
     if (!Array.isArray(tasks) || !id) return tasks;
     return tasks.map(function (t) {
-      if (t && t.id === id) return Object.assign({}, t, { deletedAt: Date.now() });
+      if (t && t.id === id) {
+        const ts = Date.now();
+        return Object.assign({}, t, { updatedAt: ts, deletedAt: ts });
+      }
       return t;
     });
   }

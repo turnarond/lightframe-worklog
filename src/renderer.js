@@ -471,7 +471,7 @@
     renderHeader();          // 跨天时顺手把顶栏日期也刷新
     renderFilterBar();
 
-    var list = state.tasks;
+    var list = state.tasks.filter(function (task) { return !task.deletedAt; });
     if (state.filterDate) {
       list = list.filter(function (task) { return task.dueDate === state.filterDate; });
     }
@@ -536,13 +536,15 @@
   function deleteTask(id) {
     var index = findIndex(id);
     if (index < 0) return;
-    var removed = state.tasks.splice(index, 1)[0];
+    var task = state.tasks[index];
+    // 软删：保留墓碑行（deletedAt），让 SyncEngine 把删除同步到云端；UI 通过 deletedAt 过滤隐藏
+    state.tasks = TM.deleteTask(state.tasks, id);
     renderTasks();
     renderWidget();
     if (state.tab === 'daily') renderDailySummary();
     if (state.tab === 'weekly') renderWeekly();
     apiCall('saveTasks', null, state.tasks);
-    showToast('已删除「' + removed.title + '」');
+    showToast('已删除「' + (task ? task.title : '') + '」');
   }
 
   /* ============ 任务详情编辑 ============ */
