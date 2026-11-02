@@ -315,3 +315,18 @@ test('deleteTask: 软删同时 bump updatedAt（使删除作为一次更新参�
   assert.ok(out[0].updatedAt >= out[0].deletedAt, 'updatedAt 与 deletedAt 同步');
   assert.equal(list[0].deletedAt, null, '原数组不被改动');
 });
+
+test('countsByDate: 排除软删任务（日历红点不虚高）', () => {
+  const tasks = [M.createTask({ title: 'a', dueDate: '2026-06-10' }), M.createTask({ title: 'b', dueDate: '2026-06-10' })];
+  tasks[1] = M.deleteTask(tasks, tasks[1].id)[1];
+  const counts = M.countsByDate(tasks, 2026, 6);
+  assert.equal(counts['2026-06-10'], 1, '软删任务不计入日历圆点');
+});
+
+test('searchTasks: 排除软删任务', () => {
+  const tasks = [M.createTask({ title: 'alpha' }), M.createTask({ title: 'beta' })];
+  tasks[0] = M.deleteTask(tasks, tasks[0].id)[0];
+  const res = M.searchTasks(tasks, 'a');
+  assert.equal(res.length, 1, '软删任务不出现在搜索结果');
+  assert.equal(res[0].title, 'beta');
+});

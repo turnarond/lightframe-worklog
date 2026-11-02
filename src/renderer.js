@@ -756,7 +756,7 @@
     clear(box);
     var day = state.viewDay || state.today;
     var list = TM.sortTasks(state.tasks.filter(function (t) {
-      return !t.done && t.dueDate === day;
+      return !t.done && !t.deletedAt && t.dueDate === day;
     }));
     if (D['w-todayLabel']) {
       D['w-todayLabel'].textContent = (day === state.today) ? '今日任务' : (mmdd(day) + ' ' + weekdayOf(day) + ' 任务');

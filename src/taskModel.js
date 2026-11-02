@@ -226,7 +226,7 @@
     const prefix = year + '-' + pad2(month) + '-';
     const counts = {};
     (tasks || []).forEach(function (task) {
-      if (!task || task.done) return;
+      if (!task || task.done || task.deletedAt) return;
       if (!isValidDateStr(task.dueDate)) return;
       if (task.dueDate.indexOf(prefix) !== 0) return;
       counts[task.dueDate] = (counts[task.dueDate] || 0) + 1;
@@ -239,7 +239,7 @@
     const keyword = typeof q === 'string' ? q.trim().toLowerCase() : '';
     if (!keyword) return list.slice();
     return list.filter(function (task) {
-      return task && typeof task.title === 'string' &&
+      return task && !task.deletedAt && typeof task.title === 'string' &&
         task.title.toLowerCase().indexOf(keyword) >= 0;
     });
   }
