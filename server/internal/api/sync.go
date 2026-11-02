@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 type tableInfo struct {
@@ -95,31 +93,23 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) upsert(ctx context.Context, info tableInfo, u, keyVal string, updatedAt int64, deletedAt *int64, dataJSON []byte, applied, conflicts []map[string]any) ([]map[string]any, []map[string]any) {
-	q := `select updated_at from ` + info.table + ` where user_id=$1 and ` + info.keyCol + `=$2`
-	var existing int64
-	err := s.Pool.QueryRow(ctx, q, u, keyVal).Scan(&existing)
-	if err == pgx.ErrNoRows {
-		_, e := s.Pool.Exec(ctx,
-			`insert into `+info.table+`(user_id,`+info.keyCol+`,updated_at,deleted_at,data) values($1,$2,$3,$4,$5::jsonb)`,
-			u, keyVal, updatedAt, deletedAt, string(dataJSON))
-		if e == nil {
-			applied = append(applied, map[string]any{info.keyCol: keyVal, "updatedAt": updatedAt})
-		}
-		return applied, conflicts
-	}
+	// 单条原子 upsert：冲突（incoming 不更新鲜）由 WHERE excluded.updated_at > 表.updated_at 判定，
+	// 这样消除「先 SELECT 再 INSERT」的 TOCTOU 竞态（否则并发 INSERT 撞 PK 会被静默吞掉）。
+	q := `insert into ` + info.table + `(user_id, ` + info.keyCol + `, updated_at, deleted_at, data) ` +
+		`values($1,$2,$3,$4,$5::jsonb) ` +
+		`on conflict (user_id, ` + info.keyCol + `) do update ` +
+		`set updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, data = excluded.data::jsonb ` +
+		`where excluded.updated_at > ` + info.table + `.updated_at`
+	tag, err := s.Pool.Exec(ctx, q, u, keyVal, updatedAt, deletedAt, string(dataJSON))
 	if err != nil {
 		return applied, conflicts
 	}
-	if updatedAt > existing {
-		_, e := s.Pool.Exec(ctx,
-			`update `+info.table+` set updated_at=$1, deleted_at=$2, data=$3::jsonb where user_id=$4 and `+info.keyCol+`=$5`,
-			updatedAt, deletedAt, string(dataJSON), u, keyVal)
-		if e == nil {
-			applied = append(applied, map[string]any{info.keyCol: keyVal, "updatedAt": updatedAt})
-		}
+	if tag.RowsAffected() == 0 {
+		// 冲突：传入版本不更新鲜，未覆盖本地
+		conflicts = append(conflicts, map[string]any{info.keyCol: keyVal, "updatedAt": updatedAt})
 		return applied, conflicts
 	}
-	conflicts = append(conflicts, map[string]any{info.keyCol: keyVal, "updatedAt": updatedAt})
+	applied = append(applied, map[string]any{info.keyCol: keyVal, "updatedAt": updatedAt})
 	return applied, conflicts
 }
 

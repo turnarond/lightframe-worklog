@@ -129,6 +129,21 @@ func TestSoftDeleteSync(t *testing.T) {
 	}
 }
 
+// 更新鲜的 push 必须覆盖旧值（验证原子 upsert 行为）。
+func TestPushOverwriteNewer(t *testing.T) {
+	s, _ := newServer(t)
+	r := s.Router()
+	tok := authed(t, r, "ov@b.com", "password1")
+	doPostA(t, r, tok, "/api/sync/push",
+		`{"changes":[{"type":"tasks","id":"O1","title":"v1","updatedAt":100,"deletedAt":null}]}`)
+	doPostA(t, r, tok, "/api/sync/push",
+		`{"changes":[{"type":"tasks","id":"O1","title":"v2","updatedAt":200,"deletedAt":null}]}`)
+	pull := doGetA(t, r, tok, "/api/sync/pull?since=0&types=tasks")
+	if !strings.Contains(pull.Body.String(), `"title":"v2"`) {
+		t.Fatal("newer push should overwrite older")
+	}
+}
+
 func TestSyncIsolation(t *testing.T) {
 	s, pool := newServer(t)
 	r := s.Router()
