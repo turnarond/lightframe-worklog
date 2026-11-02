@@ -31,8 +31,6 @@
   var DEFAULT_SETTINGS = {
     categories: ['光影集', '标准编写', '会议'],
     lastCategory: '光影集',
-    dailyReminder: { enabled: true, at: '17:30' },
-    dueReminder: { enabled: true, at: '09:00' },
     launchAtLogin: true,
     alwaysOnTop: true,
     closeToTray: true,
@@ -210,16 +208,6 @@
     return {
       categories: categories,
       lastCategory: last,
-      dailyReminder: {
-        enabled: source.dailyReminder && typeof source.dailyReminder.enabled === 'boolean'
-          ? source.dailyReminder.enabled : defaults.dailyReminder.enabled,
-        at: (source.dailyReminder && source.dailyReminder.at) || defaults.dailyReminder.at
-      },
-      dueReminder: {
-        enabled: source.dueReminder && typeof source.dueReminder.enabled === 'boolean'
-          ? source.dueReminder.enabled : defaults.dueReminder.enabled,
-        at: (source.dueReminder && source.dueReminder.at) || defaults.dueReminder.at
-      },
       launchAtLogin: typeof source.launchAtLogin === 'boolean' ? source.launchAtLogin : defaults.launchAtLogin,
       alwaysOnTop: typeof source.alwaysOnTop === 'boolean' ? source.alwaysOnTop : defaults.alwaysOnTop,
       closeToTray: typeof source.closeToTray === 'boolean' ? source.closeToTray : defaults.closeToTray,
@@ -1159,14 +1147,6 @@
       chips.appendChild(chip);
     });
 
-    D['set-daily-enabled'].checked = !!settings.dailyReminder.enabled;
-    D['set-daily-at'].value = settings.dailyReminder.at || '17:30';
-    D['set-daily-at'].disabled = !settings.dailyReminder.enabled;
-
-    D['set-due-enabled'].checked = !!settings.dueReminder.enabled;
-    D['set-due-at'].value = settings.dueReminder.at || '09:00';
-    D['set-due-at'].disabled = !settings.dueReminder.enabled;
-
     D['set-launch'].checked = !!settings.launchAtLogin;
     D['set-tray'].checked = !!settings.closeToTray;
     D['set-hotkey'].value = settings.hotkey || 'Ctrl+Shift+Space';
@@ -1443,24 +1423,6 @@
       }
     });
 
-    D['set-daily-enabled'].addEventListener('change', function () {
-      var next = Object.assign({}, state.settings.dailyReminder, { enabled: this.checked });
-      D['set-daily-at'].disabled = !next.enabled;
-      patchSettings({ dailyReminder: next });
-    });
-    D['set-daily-at'].addEventListener('change', function () {
-      var next = Object.assign({}, state.settings.dailyReminder, { at: this.value || '17:30' });
-      patchSettings({ dailyReminder: next });
-    });
-    D['set-due-enabled'].addEventListener('change', function () {
-      var next = Object.assign({}, state.settings.dueReminder, { enabled: this.checked });
-      D['set-due-at'].disabled = !next.enabled;
-      patchSettings({ dueReminder: next });
-    });
-    D['set-due-at'].addEventListener('change', function () {
-      var next = Object.assign({}, state.settings.dueReminder, { at: this.value || '09:00' });
-      patchSettings({ dueReminder: next });
-    });
     D['set-launch'].addEventListener('change', function () {
       var next = this.checked;
       state.settings.launchAtLogin = next;
@@ -1533,7 +1495,6 @@
       'w-handle', 'w-clock', 'w-ct', 'w-expand', 'w-hide', 'w-quit', 'w-settings',
       'w-body', 'w-cal', 'panel-cal-slot', 'w-calTitle', 'w-prev', 'w-next', 'w-today', 'w-cal-grid', 'w-todayLabel',
       'w-todayCount', 'w-tlist', 'w-panel',
-      'set-daily-enabled', 'set-daily-at', 'set-due-enabled', 'set-due-at',
       'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'btn-quit', 'toast',
       'w-sync',
       'acc-block', 'acc-server', 'acc-status', 'acc-form', 'acc-email', 'acc-password',

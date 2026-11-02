@@ -9,13 +9,11 @@ const TaskModel = require('./taskModel.js');
 const DEFAULT_SETTINGS = {
   categories: ['工作', '会议', '其他'],
   lastCategory: '工作',
-  dailyReminder: { enabled: true, at: '17:30' },
-  dueReminder: { enabled: true, at: '09:00' },
   launchAtLogin: true,
   alwaysOnTop: true,
   closeToTray: true,
   hotkey: 'Ctrl+Shift+Space',
-  lastReminded: { daily: null, due: null },
+  lastReminded: {},
   weeklyPlans: {},
   widget: {
     opacity: 0.55,
@@ -26,7 +24,7 @@ const DEFAULT_SETTINGS = {
   }
 };
 
-const NESTED_SETTINGS = ['dailyReminder', 'dueReminder', 'lastReminded', 'weeklyPlans', 'widget'];
+const NESTED_SETTINGS = ['lastReminded', 'weeklyPlans', 'widget'];
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function clone(value) {

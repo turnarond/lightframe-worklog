@@ -18,13 +18,11 @@ function writeRaw(file, text) {
 test('DEFAULT_SETTINGS: 与 SPEC §3 一致', () => {
   assert.deepEqual(S.DEFAULT_SETTINGS.categories, ['工作', '会议', '其他']);
   assert.equal(S.DEFAULT_SETTINGS.lastCategory, '工作');
-  assert.deepEqual(S.DEFAULT_SETTINGS.dailyReminder, { enabled: true, at: '17:30' });
-  assert.deepEqual(S.DEFAULT_SETTINGS.dueReminder, { enabled: true, at: '09:00' });
   assert.equal(S.DEFAULT_SETTINGS.launchAtLogin, true);
   assert.equal(S.DEFAULT_SETTINGS.alwaysOnTop, true);
   assert.equal(S.DEFAULT_SETTINGS.closeToTray, true);
   assert.equal(S.DEFAULT_SETTINGS.hotkey, 'Ctrl+Shift+Space');
-  assert.deepEqual(S.DEFAULT_SETTINGS.lastReminded, { daily: null, due: null });
+  assert.deepEqual(S.DEFAULT_SETTINGS.lastReminded, {});
   assert.deepEqual(S.DEFAULT_SETTINGS.weeklyPlans, {});
   assert.deepEqual(S.DEFAULT_SETTINGS.widget, {
     opacity: 0.55,
@@ -52,9 +50,7 @@ test('设置 store: 文件不存在 → 默认设置（深拷贝，不共享引�
   const settings = await store.load();
   assert.deepEqual(settings, S.DEFAULT_SETTINGS);
   settings.categories.push('被污染');
-  settings.dailyReminder.at = '08:00';
   assert.deepEqual(S.DEFAULT_SETTINGS.categories, ['工作', '会议', '其他']);
-  assert.equal(S.DEFAULT_SETTINGS.dailyReminder.at, '17:30');
 });
 
 // ---------- 存取往返 ----------
@@ -172,14 +168,11 @@ test('设置 store: 旧文件缺字段时保留默认值（浅层 + 嵌套）', 
   const file = path.join(tmpDir(), 'settings.json');
   writeRaw(file, JSON.stringify({
     categories: ['只改这个'],
-    dailyReminder: { enabled: false },
     lastReminded: { daily: '2026-10-30' }
   }));
   const s = await S.createSettingsStore(file).load();
   assert.deepEqual(s.categories, ['只改这个']);
-  assert.deepEqual(s.dailyReminder, { enabled: false, at: '17:30' }, '嵌套缺 at 用默认');
-  assert.deepEqual(s.dueReminder, { enabled: true, at: '09:00' });
-  assert.deepEqual(s.lastReminded, { daily: '2026-10-30', due: null });
+  assert.deepEqual(s.lastReminded, { daily: '2026-10-30' });
   assert.deepEqual(s.weeklyPlans, {});
   assert.equal(s.hotkey, 'Ctrl+Shift+Space');
 });
