@@ -563,6 +563,22 @@ function registerIpc() {
     sendToMain('refresh');
     return true;
   });
+
+  // 读取当前版本号（来自 package.json 的 version 字段）
+  ipcMain.handle('app:getVersion', function () {
+    return app.getVersion();
+  });
+
+  // 检查更新：v2.6 将接入 electron-updater（NSIS 静默升级，portable 弹「去下载」）；
+  // 当前为统一接入点，先返回版本与「尚未启用」状态，避免空实现崩溃或误报
+  ipcMain.handle('app:checkUpdate', function () {
+    var v = app.getVersion();
+    return {
+      version: v,
+      available: false,
+      message: '当前已是最新版本 v' + v + '；自动更新将在 v2.6 启用。'
+    };
+  });
 }
 
 // ---------- 启动 ----------

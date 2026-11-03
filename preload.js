@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('api', {
   setHeight: function (h) { return ipcRenderer.invoke('widget:setHeight', h); },
   resetWidgetPosition: function () { return ipcRenderer.invoke('widget:resetPosition'); },
   notifyRefresh: function () { return ipcRenderer.invoke('app:refresh'); },
+  getVersion: function () { return ipcRenderer.invoke('app:getVersion'); },
+  checkUpdate: function () { return ipcRenderer.invoke('app:checkUpdate'); },
 
   // 主进程 -> 渲染进程
   onRefresh: function (cb) {

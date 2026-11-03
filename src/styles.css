@@ -1049,6 +1049,19 @@ textarea:focus-visible,
 }
 .btn-quit:hover { background: rgba(178, 58, 46, .08); border-color: var(--p-high); }
 
+.set-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-soft);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.set-foot .ver { font-family: var(--mono); letter-spacing: .02em; }
+.set-foot .btn-link { font-size: 11px; }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed;

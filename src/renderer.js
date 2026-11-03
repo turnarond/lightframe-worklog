@@ -55,7 +55,9 @@
     copyText: '复制',
     quit: '退出',
     setAlwaysOnTop: '置顶',
-    setLaunchAtLogin: '开机自启'
+    setLaunchAtLogin: '开机自启',
+    getVersion: '读取版本',
+    checkUpdate: '检查更新'
   };
 
   var state = {
@@ -1242,6 +1244,25 @@
 
   /* ============ 设置弹窗 ============ */
 
+  function renderVersion() {
+    if (!D['app-version']) return;
+    D['app-version'].textContent = 'v' + (state.appVersion || '…');
+    if (!state.appVersionFetched) {
+      state.appVersionFetched = true;
+      apiCall('getVersion', '2.5.1').then(function (v) {
+        state.appVersion = v;
+        if (D['app-version']) D['app-version'].textContent = 'v' + v;
+      });
+    }
+  }
+
+  function checkForUpdate() {
+    apiCall('checkUpdate', { version: state.appVersion || '2.5.1', available: false }).then(function (res) {
+      var msg = (res && res.message) ? res.message : '已是最新版本';
+      showToast(msg, res && res.available ? 'ok' : 'info');
+    });
+  }
+
   function renderSettings() {
     var settings = state.settings;
 
@@ -1263,6 +1284,7 @@
       D['set-opacity'].value = settings.widget.opacity;
       if (D['set-opacity-val']) D['set-opacity-val'].textContent = Math.round(settings.widget.opacity * 100) + '%';
     }
+    renderVersion();
     renderAccountArea();
   }
 
@@ -1575,6 +1597,9 @@
       }
       showToast('已复位挂件位置');
     });
+    if (D['check-update']) {
+      D['check-update'].addEventListener('click', function () { checkForUpdate(); });
+    }
 
     // Esc 关弹窗
     document.addEventListener('keydown', function (event) {
@@ -1621,6 +1646,7 @@
       'w-body', 'w-cal', 'panel-cal-slot', 'w-calTitle', 'w-prev', 'w-next', 'w-today', 'w-cal-grid', 'w-todayLabel',
       'w-todayCount', 'w-tlist', 'w-panel',
       'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'set-opacity', 'set-opacity-val', 'btn-quit', 'toast',
+      'app-version', 'check-update',
       'w-sync',
       'acc-block', 'acc-server', 'acc-status', 'acc-form', 'acc-email', 'acc-password',
       'acc-confirm', 'acc-confirm-row', 'acc-submit', 'acc-toggle', 'acc-forgot',
