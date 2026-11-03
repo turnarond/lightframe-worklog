@@ -884,6 +884,7 @@
     var root = document.documentElement;
     root.style.setProperty('--w-opacity', String(w.opacity));
     root.style.setProperty('--w-blur', w.blur + 'px');
+    root.style.setProperty('--w-scale', String(w.scale || 1));
     document.body.classList.toggle('ct-mode', !!w.clickThrough);
     document.body.classList.toggle('expanded', !!w.expanded);
     if (D['w-ct']) {
@@ -1283,6 +1284,13 @@
     if (D['set-opacity']) {
       D['set-opacity'].value = settings.widget.opacity;
       if (D['set-opacity-val']) D['set-opacity-val'].textContent = Math.round(settings.widget.opacity * 100) + '%';
+      D['set-opacity'].style.setProperty('--fill', (settings.widget.opacity * 100) + '%');
+    }
+    if (D['set-scale']) {
+      var s = settings.widget.scale || 1;
+      D['set-scale'].value = s;
+      if (D['set-scale-val']) D['set-scale-val'].textContent = Math.round(s * 100) + '%';
+      D['set-scale'].style.setProperty('--fill', ((s - 0.85) / (1.4 - 0.85) * 100) + '%');
     }
     renderVersion();
     renderAccountArea();
@@ -1579,6 +1587,19 @@
         apiCall('saveSettings', null, state.settings);
       });
     }
+    if (D['set-scale']) {
+      D['set-scale'].addEventListener('input', function () {
+        var v = parseFloat(this.value);
+        if (!(v > 0)) v = 1;
+        state.settings.widget.scale = v;
+        if (D['set-scale-val']) D['set-scale-val'].textContent = Math.round(v * 100) + '%';
+        this.style.setProperty('--fill', ((v - 0.85) / (1.4 - 0.85) * 100) + '%');
+        applyWidgetStyle();
+      });
+      D['set-scale'].addEventListener('change', function () {
+        apiCall('saveSettings', null, state.settings);
+      });
+    }
     var hotkeyInput = D['set-hotkey'];
     hotkeyInput.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') {
@@ -1622,6 +1643,13 @@
         flushWeeklyPlan();
       }
     });
+
+    // v2.6 自动更新：接收主进程推送的更新状态并提示
+    if (typeof bridge.onUpdate === 'function') {
+      bridge.onUpdate(function (p) {
+        if (p && p.message) showToast(p.message, p.type || 'info');
+      });
+    }
   }
 
   /* ============ 启动 ============ */
@@ -1645,7 +1673,7 @@
       'w-handle', 'w-clock', 'w-ct', 'w-expand', 'w-hide', 'w-quit', 'w-settings',
       'w-body', 'w-cal', 'panel-cal-slot', 'w-calTitle', 'w-prev', 'w-next', 'w-today', 'w-cal-grid', 'w-todayLabel',
       'w-todayCount', 'w-tlist', 'w-panel',
-      'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'set-opacity', 'set-opacity-val', 'btn-quit', 'toast',
+      'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'set-opacity', 'set-opacity-val', 'set-scale', 'set-scale-val', 'btn-quit', 'toast',
       'app-version', 'check-update',
       'w-sync',
       'acc-block', 'acc-server', 'acc-status', 'acc-form', 'acc-email', 'acc-password',

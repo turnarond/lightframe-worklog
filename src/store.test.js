@@ -29,7 +29,8 @@ test('DEFAULT_SETTINGS: 与 SPEC §3 一致', () => {
     blur: 14,
     clickThrough: false,
     expanded: false,
-    rect: null
+    rect: null,
+    scale: 1
   });
 });
 

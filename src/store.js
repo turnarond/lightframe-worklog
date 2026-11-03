@@ -20,7 +20,8 @@ const DEFAULT_SETTINGS = {
     blur: 14,
     clickThrough: false,
     expanded: false,
-    rect: null
+    rect: null,
+    scale: 1
   }
 };
 
@@ -59,10 +60,13 @@ async function readJson(filePath) {
   }
 }
 
-/** 递归建目录后写入 2 空格缩进的 JSON */
+/** 递归建目录后原子写入：先写临时文件，再 rename 覆盖，避免写一半崩溃/断电导致文件损坏 */
 async function writeJson(filePath, data) {
-  await fsp.mkdir(path.dirname(filePath), { recursive: true });
-  await fsp.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
+  const dir = path.dirname(filePath);
+  await fsp.mkdir(dir, { recursive: true });
+  const tmpPath = filePath + '.tmp';
+  await fsp.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+  await fsp.rename(tmpPath, filePath);
 }
 
 function createTaskStore(filePath) {

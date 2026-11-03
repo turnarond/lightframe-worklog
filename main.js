@@ -21,6 +21,31 @@ const { createTaskStore, createLogStore, createSettingsStore, createSyncMetaStor
 const { createSyncBridge } = require('./src/syncBridge.js');
 const AuthClient = require('./src/authClient.js');
 
+// v2.6 自动更新：electron-updater 为可选依赖，未安装时优雅降级（检查更新走占位提示）
+let autoUpdater = null;
+try { autoUpdater = require('electron-updater').autoUpdater; } catch (e) { autoUpdater = null; }
+
+function notifyUpdate(message, type) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app:update-status', { message: message, type: type || 'info' });
+  }
+}
+if (autoUpdater) {
+  autoUpdater.autoDownload = true;
+  autoUpdater.on('update-available', function (info) {
+    notifyUpdate('发现新版本 v' + (info && info.version ? info.version : '') + '，正在后台下载…', 'info');
+  });
+  autoUpdater.on('update-not-available', function () {
+    notifyUpdate('已是最新版本 v' + app.getVersion(), 'ok');
+  });
+  autoUpdater.on('update-downloaded', function () {
+    notifyUpdate('更新已下载，重启后生效', 'ok');
+  });
+  autoUpdater.on('error', function (err) {
+    notifyUpdate('检查更新失败：' + (err && err.message ? err.message : '未知错误'), 'error');
+  });
+}
+
 const APP_ID = 'com.lightframe.worklog';
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 const QUICK_ADD_SIZE = { width: 420, height: 160 };
@@ -569,15 +594,14 @@ function registerIpc() {
     return app.getVersion();
   });
 
-  // 检查更新：v2.6 将接入 electron-updater（NSIS 静默升级，portable 弹「去下载」）；
-  // 当前为统一接入点，先返回版本与「尚未启用」状态，避免空实现崩溃或误报
+  // 检查更新：已接入 electron-updater（v2.6）；未安装依赖时优雅退回占位提示
   ipcMain.handle('app:checkUpdate', function () {
     var v = app.getVersion();
-    return {
-      version: v,
-      available: false,
-      message: '当前已是最新版本 v' + v + '；自动更新将在 v2.6 启用。'
-    };
+    if (!autoUpdater) {
+      return { version: v, available: false, message: '当前已是最新版本 v' + v + '；自动更新尚未配置（v2.6 将启用）。' };
+    }
+    try { autoUpdater.checkForUpdates().catch(function () {}); } catch (e) {}
+    return { version: v, available: null, message: '正在检查更新…' };
   });
 }
 

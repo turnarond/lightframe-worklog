@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('api', {
   notifyRefresh: function () { return ipcRenderer.invoke('app:refresh'); },
   getVersion: function () { return ipcRenderer.invoke('app:getVersion'); },
   checkUpdate: function () { return ipcRenderer.invoke('app:checkUpdate'); },
+  onUpdate: function (cb) { ipcRenderer.on('app:update-status', function (_e, payload) { cb(payload); }); },
 
   // 主进程 -> 渲染进程
   onRefresh: function (cb) {
