@@ -326,6 +326,7 @@
     if (!D['qa-date']) return;
     if (state.settings.widget.expanded) return;
     D['qa-date'].value = state.viewDay || state.today;
+    if (qaDateTrigger) qaDateTrigger._paint();
   }
 
   async function handleAdd(event) {
@@ -406,14 +407,12 @@
     var meta = el('div', { class: 'meta' });
     meta.appendChild(el('span', { class: 'cat', text: task.category }));
 
-    // 截止日：行内可直接改
-    var dateInput = el('input', { type: 'date', class: 'date-mini' });
-    dateInput.value = task.dueDate || '';
-    dateInput.setAttribute('aria-label', '截止日期');
-    if (TM.isOverdue(task, state.today)) dateInput.classList.add('overdue');
-    dateInput.addEventListener('change', function () {
-      updateTask(task.id, { dueDate: dateInput.value || null });
-    });
+    // 截止日：行内可改，但禁止手填——点击只弹日历选择器
+    var dateTrigger = createDateTrigger(
+      function () { return task.dueDate || ''; },
+      function (iso) { updateTask(task.id, { dueDate: iso || null }); },
+      { ariaLabel: '截止日期', placeholder: '设截止日', overdue: TM.isOverdue(task, state.today) }
+    );
 
     // 优先级：行内可直接改
     var prio = el('select', { class: 'prio-mini' });
@@ -553,6 +552,7 @@
     D['te-category'].value = task.category;
     D['te-priority'].value = task.priority;
     D['te-date'].value = task.dueDate || '';
+    if (teDateTrigger) teDateTrigger._paint();
     // 有详情则展示；空白则预置一个圆点，省得每次自己打
     D['te-details'].value = (task.details && task.details.trim()) ? task.details : '· ';
 
@@ -665,6 +665,112 @@
   // 周一起的 42 格（直接按周一为首生成，避免「行内旋转」在 1 号为周日时错位）
   function monthCellsMonFirst(year, month) {
     return (TM.monthGridMon ? TM.monthGridMon(year, month, state.today) : TM.monthGrid(year, month, state.today));
+  }
+
+  /* ============ 自定义日历选择器（禁止手填，只弹日历） ============ */
+  var datePopover = null;
+  function closeDatePopover() {
+    if (datePopover) {
+      if (datePopover._close) document.removeEventListener('mousedown', datePopover._close, true);
+      datePopover.remove();
+      datePopover = null;
+    }
+  }
+  function openDatePopover(anchor, currentISO, onPick) {
+    closeDatePopover();
+    var pop = el('div', { class: 'date-pop' });
+    var d = (currentISO && currentISO.split('-')) || state.today.split('-');
+    var vy = Number(d[0]), vm = Number(d[1]);
+
+    var head = el('div', { class: 'dp-head' });
+    var prev = el('button', { type: 'button', class: 'dp-nav', 'aria-label': '上个月', text: '‹' });
+    var title = el('span', { class: 'dp-title' });
+    var next = el('button', { type: 'button', class: 'dp-nav', 'aria-label': '下个月', text: '›' });
+    head.appendChild(prev); head.appendChild(title); head.appendChild(next);
+
+    var week = el('div', { class: 'dp-week' });
+    ['一', '二', '三', '四', '五', '六', '日'].forEach(function (w) { week.appendChild(el('span', { text: w })); });
+
+    var grid = el('div', { class: 'dp-grid' });
+    var foot = el('div', { class: 'dp-foot' });
+    var todayBtn = el('button', { type: 'button', class: 'dp-soft', text: '今天' });
+    var clearBtn = el('button', { type: 'button', class: 'dp-soft', text: '清除' });
+    foot.appendChild(todayBtn); foot.appendChild(clearBtn);
+
+    function paint() {
+      title.textContent = vy + ' 年 ' + vm + ' 月';
+      clear(grid);
+      monthCellsMonFirst(vy, vm).forEach(function (iso) {
+        var p = iso.split('-');
+        var muted = Number(p[0]) !== vy || Number(p[1]) !== vm;
+        var b = el('button', { type: 'button', class: 'dp-day' + (muted ? ' muted' : ''), text: String(Number(p[2])) });
+        if (iso === state.today) b.classList.add('today');
+        if (iso === currentISO) b.classList.add('sel');
+        b.addEventListener('click', function () { onPick(iso); closeDatePopover(); });
+        grid.appendChild(b);
+      });
+    }
+    prev.addEventListener('click', function () { vm--; if (vm < 1) { vm = 12; vy--; } paint(); });
+    next.addEventListener('click', function () { vm++; if (vm > 12) { vm = 1; vy++; } paint(); });
+    todayBtn.addEventListener('click', function () { onPick(state.today); closeDatePopover(); });
+    clearBtn.addEventListener('click', function () { onPick(null); closeDatePopover(); });
+
+    pop.appendChild(head); pop.appendChild(week); pop.appendChild(grid); pop.appendChild(foot);
+    document.body.appendChild(pop);
+
+    var r = anchor.getBoundingClientRect();
+    var ph = pop.offsetHeight, pw = pop.offsetWidth;
+    var top = r.bottom + 6;
+    if (top + ph > window.innerHeight) top = Math.max(6, r.top - ph - 6);
+    var left = r.left;
+    if (left + pw > window.innerWidth) left = Math.max(6, window.innerWidth - pw - 6);
+    pop.style.top = top + 'px';
+    pop.style.left = left + 'px';
+    paint();
+
+    datePopover = pop;
+    pop._close = function (e) { if (pop && !pop.contains(e.target)) closeDatePopover(); };
+    setTimeout(function () { document.addEventListener('mousedown', pop._close, true); }, 0);
+  }
+
+  function createDateTrigger(getVal, setVal, opts) {
+    opts = opts || {};
+    var btn = el('button', { type: 'button', class: 'date-trigger' });
+    if (opts.ariaLabel) btn.setAttribute('aria-label', opts.ariaLabel);
+    function paint() {
+      var v = getVal();
+      btn.textContent = v ? v : (opts.placeholder || '设日期');
+      btn.classList.toggle('empty', !v);
+      btn.classList.toggle('overdue', !!(opts.overdue && v));
+    }
+    paint();
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openDatePopover(btn, getVal(), function (iso) { setVal(iso); paint(); });
+    });
+    btn._paint = paint;
+    return btn;
+  }
+
+  function setupDateFields() {
+    if (D['qa-date']) {
+      D['qa-date'].style.display = 'none';
+      qaDateTrigger = createDateTrigger(
+        function () { return D['qa-date'].value || ''; },
+        function (iso) { D['qa-date'].value = iso || ''; },
+        { ariaLabel: '截止日期', placeholder: '截止日(可空)' }
+      );
+      D['qa-date'].parentNode.insertBefore(qaDateTrigger, D['qa-date']);
+    }
+    if (D['te-date']) {
+      D['te-date'].style.display = 'none';
+      teDateTrigger = createDateTrigger(
+        function () { return D['te-date'].value || ''; },
+        function (iso) { D['te-date'].value = iso || ''; },
+        { ariaLabel: '截止日期', placeholder: '设截止日' }
+      );
+      D['te-date'].parentNode.insertBefore(teDateTrigger, D['te-date'].nextSibling);
+    }
   }
 
   function renderWidgetCalendar() {
@@ -820,31 +926,36 @@
     await apiCall('saveSettings', null, state.settings);
   }
 
-  // 2.5.1：OS 级鼠标穿透 + 命中手柄/按钮时临时恢复可交互
-  var ctOsActive = false;
-  var ctMoveHandler = null;
+  // 2.5.1：OS 级鼠标穿透 + 命中可交互区（手柄/面板/弹窗）时临时恢复可交互
+  // 用 mouseover/mouseout 委托，确保「穿透态下也能拖动坐标手柄」可靠生效
+  var teDateTrigger = null;
+  var qaDateTrigger = null;
+  var ctInteractive = false;
+  function setOsInteractive(interactive) {
+    if (typeof bridge.setClickThrough !== 'function') return;
+    if (ctInteractive === interactive) return;
+    ctInteractive = interactive;
+    bridge.setClickThrough(!interactive); // interactive=true => 关闭穿透（窗口可点）
+  }
+  var ctOver = null, ctOut = null;
   function applyClickThrough(flag) {
     if (typeof bridge.setClickThrough !== 'function') return;
-    if (ctMoveHandler) {
-      document.removeEventListener('mousemove', ctMoveHandler, true);
-      ctMoveHandler = null;
-    }
+    if (ctOver) { document.removeEventListener('mouseover', ctOver, true); ctOver = null; }
+    if (ctOut) { document.removeEventListener('mouseout', ctOut, true); ctOut = null; }
     if (flag) {
-      ctOsActive = true;
-      bridge.setClickThrough(true);
-      ctMoveHandler = function (e) {
-        var interactive = e.target && e.target.closest &&
-          e.target.closest('.w-handle, button, .modal, input, textarea, a[href], [role="button"]');
-        var wantOs = !interactive; // 命中可交互元素则临时关闭穿透
-        if (wantOs !== ctOsActive) {
-          ctOsActive = wantOs;
-          bridge.setClickThrough(wantOs);
-        }
+      setOsInteractive(false); // 进入穿透态：OS 忽略窗口（仅手柄区可临时恢复）
+      var zone = '.w-handle, #w-panel, .modal';
+      ctOver = function (e) {
+        if (e.target && e.target.closest && e.target.closest(zone)) setOsInteractive(true);
       };
-      document.addEventListener('mousemove', ctMoveHandler, true);
+      ctOut = function (e) {
+        var to = e.relatedTarget;
+        if (!(to && to.closest && to.closest(zone))) setOsInteractive(false);
+      };
+      document.addEventListener('mouseover', ctOver, true);
+      document.addEventListener('mouseout', ctOut, true);
     } else {
-      ctOsActive = false;
-      bridge.setClickThrough(false);
+      setOsInteractive(true); // 关闭穿透：窗口完全可交互
     }
   }
 
@@ -1599,6 +1710,7 @@
     renderPinButton();
     renderCategorySelect();
     renderPriorityButtons();
+    setupDateFields();
     renderTasks();
     renderWidget();
     renderDaily();
