@@ -1426,6 +1426,8 @@ body.ready .reveal { opacity: 1; transform: none; }
   line-height: 1.65;
   color: var(--ink);
   overflow-wrap: anywhere;
+  max-height: 42vh;
+  overflow: auto;
 }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }

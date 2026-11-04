@@ -50,7 +50,12 @@ contextBridge.exposeInMainWorld('api', {
   // v2.7 Markdown 渲染（任务详情 / 日报 / 周报），输出已净化的安全 HTML
   renderMarkdown: function (src) {
     if (!MarkdownLib || !MarkdownIt || !DOMPurify) return '';
-    return MarkdownLib.render(src, MarkdownIt, DOMPurify);
+    try {
+      return MarkdownLib.render(src, MarkdownIt, DOMPurify);
+    } catch (e) {
+      console.error('[preload] Markdown 渲染失败，已降级为空：', e && e.message);
+      return '';
+    }
   },
 
   // 主进程 -> 渲染进程

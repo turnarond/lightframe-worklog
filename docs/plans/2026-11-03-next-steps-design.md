@@ -26,10 +26,15 @@
 - 不做导出/导入界面（v3 云同步上线后天然成为备份；此前可由用户手动复制 `userData` 文件夹兜底）。
 - `src/store.js` 改为**写临时文件再 `rename`** 的原子写入，防止写到一半崩溃/断电导致单文件损坏全丢。最低成本健壮性提升。
 
-### #3 加链接 → 支持 Markdown 富文本（单独成版 v2.7）
-- 任务与日志支持 Markdown 渲染：链接只是其中一项，还能加粗、列表等。
-- 需引入渲染层（如 `markdown-it`），并做 **XSS 防护**（只渲染、不执行原始 HTML）。
-- 因改动最大，单独成 **v2.7**，不塞进 v2.6。
+### #3 加链接 → 支持 Markdown 富文本（v2.7，已实现于 feat/v2.7-markdown）
+- 任务与日志支持 Markdown 渲染：链接、加粗、列表、引用、行内/块代码。
+- 渲染管线：`src/markdown.js`（`markdown-it` + `DOMPurify` **双层 XSS 防护**；`html:false` 禁原始 HTML 为第一道，DOMPurify 为第二道；链接强制 `target=_blank rel=noopener`）。
+- 经 preload `window.api.renderMarkdown` 暴露给渲染进程（contextIsolation 下安全；调用处带 try/catch 优雅降级为空白，**不拖垮 api 桥接**）。
+- 存储：只存**原始 Markdown 源码**进现有 JSON，云同步（v3.0）零冲突。
+- 编辑模型（已定，**预览切换**）：每个文本域「预览/编辑」切换——默认源码态，点「预览」就地渲染成手账样式；保存逻辑不变（读 `textarea.value`）；任务列表备注首行亦渲染。
+- 视觉（frontend-design，活版印刷手账风）：衬线标题+细墨线、火漆色「–」列表记号、强调色下划线链接、加重墨色加粗、贴纸描边代码块、左侧火漆规引用；预览容器有高度上限可滚动。
+- 测试：`src/markdown.test.js` 4 项覆盖第一层 XSS 收敛（script 转义 / 链接 target·rel / 加粗列表 / 空输入），全量 114 测试通过。**第二层（DOMPurify）单测暂以恒等 mock 覆盖，真实 DOM 集成测试待补（需 jsdom）**。
+- 评审（requesting-code-review，2026-11-05）：无 Critical；1 Important（`renderMarkdown` 调用缺 try/catch，已修）+ 数项 Minor（预览高度上限、降级回退纯文本、纯空格占位、DRY 复用）均已修；jsdom 集成测试记为后续。
 
 ### #4 字体 / 颜色 → 仅字号 / 缩放
 - 设置页新增字号/缩放项，存入 `settings`，解决桌面悬浮场景下的可读性。

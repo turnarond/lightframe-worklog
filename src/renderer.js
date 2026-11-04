@@ -405,7 +405,12 @@
       var firstLine = task.details.split('\n').filter(function (l) { return l.trim(); })[0] || '';
       firstLine = firstLine.replace(/^\s*·\s*/, '');
       var noteEl = el('div', { class: 'note' });
-      noteEl.innerHTML = window.api.renderMarkdown(firstLine) || '';
+      var safeHtml = window.api.renderMarkdown(firstLine);
+      if (safeHtml) {
+        noteEl.innerHTML = safeHtml;          // 渲染成功：展示 Markdown
+      } else {
+        noteEl.textContent = firstLine;        // 降级：渲染失败时回退纯文本，信息不丢失
+      }
       body.appendChild(noteEl);
     }
 
@@ -1762,17 +1767,26 @@
     var preview = document.getElementById(textareaId + '-md');
     var btn = document.querySelector('.md-toggle[data-target="' + textareaId + '"]');
     if (!preview || !btn) return;
-    ta.hidden = false; preview.hidden = true; btn.textContent = '预览';
-    btn.addEventListener('click', function () {
-      if (ta.hidden) {                        // 预览态 -> 编辑态
-        ta.hidden = false; preview.hidden = true; btn.textContent = '预览'; ta.focus();
-      } else {                                // 编辑态 -> 预览态
-        var html = window.api.renderMarkdown(ta.value);
+
+    function toEdit() {
+      ta.hidden = false; preview.hidden = true; btn.textContent = '预览';
+    }
+    function toPreview() {
+      var src = ta.value;
+      if (!src.trim()) {
+        preview.innerHTML = '<p class="md-empty">（空）</p>';
+      } else {
+        var html = window.api.renderMarkdown(src);
         preview.innerHTML = (html && html.trim()) ? html : '<p class="md-empty">（空）</p>';
-        ta.hidden = true; preview.hidden = false; btn.textContent = '编辑';
       }
+      ta.hidden = true; preview.hidden = false; btn.textContent = '编辑';
+    }
+
+    toEdit();                                 // 默认编辑态
+    btn.addEventListener('click', function () {
+      if (ta.hidden) toEdit(); else toPreview();
     });
-    ta._resetMd = function () { ta.hidden = false; preview.hidden = true; btn.textContent = '预览'; };
+    ta._resetMd = toEdit;                     // 打开任务详情时复位为编辑态
   }
   function setupMarkdownFields() {
     ['te-details', 'daily-progress', 'daily-issues', 'daily-plan', 'weekly-plan'].forEach(setupMdField);
