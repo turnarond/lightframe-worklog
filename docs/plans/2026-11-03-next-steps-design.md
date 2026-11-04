@@ -20,6 +20,7 @@
 - 接入 `electron-updater` + GitHub Releases（或自建静态托管）。
 - **NSIS 安装版**静默自更新；**portable 单文件版**只弹「有新版本，去下载」提示（无安装目录、无法自我替换）。
 - 结论：**分发以 NSIS 安装版为主**，portable 退居「绿色版」定位。
+- **决议（2026-11-04）**：正式采用 `electron-updater` + **公开 GitHub Releases**，仓库 `turnarond/lightframe-worklog`（`publish` 已配置）。`package.json` 的 `release` 脚本 = `electron-builder --win nsis --publish=always`，发版时 `GH_TOKEN=<token> npm run release` 一条出 Release（含 `latest.yml` / `.blockmap` / 安装包）。**代码签名暂缓**：更新/安装时仍弹 SmartScreen 警告，用户点「仍要运行」可过，与手动下载同体验；零警告留待后续评估付费证书。
 
 ### #2 数据存储 / 导出 → 暂不做导出 UI，只补原子写入
 - 不做导出/导入界面（v3 云同步上线后天然成为备份；此前可由用户手动复制 `userData` 文件夹兜底）。
@@ -44,7 +45,8 @@
 
 ## 3. 待定 / 风险
 
-- **发布渠道**：GitHub Releases 公开还是私有；是否做代码签名以消除 SmartScreen 拦截（当前打包无签名，双击有警告）。
+- **发布渠道（已定）**：公开 GitHub Releases，仓库 `turnarond/lightframe-worklog`；发版经 `GH_TOKEN` + `npm run release` 自动建 Release 并上传 `latest.yml` / `.blockmap` / 安装包。
+- **代码签名（暂缓）**：暂不付费签名；更新与安装均会弹 SmartScreen，用户点「仍要运行」可过。若后续要求零警告，再评估 OV/EV 证书接入 `electron-builder` 自动签名。
 - **Markdown 选型与防护**：渲染库选型、`sanitize` 策略、是否支持编辑态预览。
 - **升级顺序收益**：v2.6 先上自动更新，可使 v2.7 / v3.0 直接静默推达，降低用户手动重装成本。
 - **数据迁移**：当前 JSON 直接读写，v3 schema 变更时仍需按 `settings.version` 驱动轻量迁移（本次未纳入范围，留待 v3.0 一并设计）。

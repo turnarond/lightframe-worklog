@@ -10,7 +10,8 @@
     "test": "node --test src/*.test.js",
     "icon": "node tools/genicon.js",
     "dist": "electron-builder --win nsis",
-    "dist:portable": "electron-builder --win portable"
+    "dist:portable": "electron-builder --win portable",
+    "release": "electron-builder --win nsis --publish=always"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -47,8 +48,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "YOUR_GITHUB_OWNER",
-        "repo": "YOUR_REPO",
+        "owner": "turnarond",
+        "repo": "lightframe-worklog",
         "private": false
       }
     ]
