@@ -9,7 +9,8 @@
     "start": "electron .",
     "test": "node --test src/*.test.js",
     "icon": "node tools/genicon.js",
-    "dist": "electron-builder --win portable"
+    "dist": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -31,9 +32,28 @@
     ],
     "win": {
       "target": [
+        "nsis",
         "portable"
       ],
       "icon": "assets/icon.png"
-    }
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "光影工作志"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "YOUR_GITHUB_OWNER",
+        "repo": "YOUR_REPO",
+        "private": false
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }
