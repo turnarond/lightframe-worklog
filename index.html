@@ -112,18 +112,30 @@
     </section>
 
     <div class="field reveal" style="--d:.16s">
-      <label for="daily-progress">今日进展</label>
+      <div class="field-head">
+        <label for="daily-progress">今日进展</label>
+        <button type="button" class="md-toggle" data-target="daily-progress">预览</button>
+      </div>
       <textarea id="daily-progress" rows="4" placeholder="做了什么，推进到哪一步…"></textarea>
+      <div class="md" id="daily-progress-md" hidden></div>
     </div>
 
     <div class="field reveal" style="--d:.22s">
-      <label for="daily-issues">问题与风险</label>
+      <div class="field-head">
+        <label for="daily-issues">问题与风险</label>
+        <button type="button" class="md-toggle" data-target="daily-issues">预览</button>
+      </div>
       <textarea id="daily-issues" rows="3" placeholder="卡在哪里，需要谁配合…"></textarea>
+      <div class="md" id="daily-issues-md" hidden></div>
     </div>
 
     <div class="field reveal" style="--d:.28s">
-      <label for="daily-plan">明日计划</label>
+      <div class="field-head">
+        <label for="daily-plan">明日计划</label>
+        <button type="button" class="md-toggle" data-target="daily-plan">预览</button>
+      </div>
       <textarea id="daily-plan" rows="3" placeholder="明天先做哪几件…"></textarea>
+      <div class="md" id="daily-plan-md" hidden></div>
     </div>
 
     <div class="foot reveal" style="--d:.34s">
@@ -159,8 +171,12 @@
     </section>
 
     <div class="field reveal" style="--d:.28s">
-      <label for="weekly-plan">下周计划</label>
+      <div class="field-head">
+        <label for="weekly-plan">下周计划</label>
+        <button type="button" class="md-toggle" data-target="weekly-plan">预览</button>
+      </div>
       <textarea id="weekly-plan" rows="4" placeholder="下周先做什么…"></textarea>
+      <div class="md" id="weekly-plan-md" hidden></div>
     </div>
 
     <section class="card reveal" aria-labelledby="weekly-ov-title" style="--d:.34s">
@@ -320,8 +336,12 @@
         </div>
       </div>
 
-      <label class="fld-label" for="te-details">详细信息 <span class="fld-hint">（换行自动加 · ）</span></label>
+      <div class="fld-head">
+        <label class="fld-label" for="te-details">详细信息 <span class="fld-hint">（支持 Markdown：**加粗** · 列表 · [链接](url)）</span></label>
+        <button type="button" class="md-toggle" data-target="te-details">预览</button>
+      </div>
       <textarea id="te-details" rows="6" placeholder="· 关键点一&#10;· 关键点二"></textarea>
+      <div class="md" id="te-details-md" hidden></div>
 
       <div class="modal-foot">
         <button class="btn-mini danger" id="te-delete" type="button">删除</button>

@@ -55,6 +55,8 @@
     ]
   },
   "dependencies": {
-    "electron-updater": "^6.8.11"
+    "dompurify": "^3.4.17",
+    "electron-updater": "^6.8.11",
+    "markdown-it": "^15.0.3"
   }
 }

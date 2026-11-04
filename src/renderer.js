@@ -400,10 +400,13 @@
     var body = el('div', { class: 'body' });
     body.appendChild(el('div', { class: 't', text: task.title }));
 
-    // 详细信息预览：只展示首行非空内容，完整内容在详情弹窗里看
+    // 详细信息预览：只展示首行非空内容（Markdown 渲染），完整内容在详情弹窗里看
     if (task.details && task.details.trim()) {
       var firstLine = task.details.split('\n').filter(function (l) { return l.trim(); })[0] || '';
-      body.appendChild(el('div', { class: 'note', text: firstLine.replace(/^\s*·\s*/, '') }));
+      firstLine = firstLine.replace(/^\s*·\s*/, '');
+      var noteEl = el('div', { class: 'note' });
+      noteEl.innerHTML = window.api.renderMarkdown(firstLine) || '';
+      body.appendChild(noteEl);
     }
 
     var meta = el('div', { class: 'meta' });
@@ -557,6 +560,7 @@
     if (teDateTrigger) teDateTrigger._paint();
     // 有详情则展示；空白则预置一个圆点，省得每次自己打
     D['te-details'].value = (task.details && task.details.trim()) ? task.details : '· ';
+    if (D['te-details']._resetMd) D['te-details']._resetMd();   // 打开编辑器时回到编辑态
 
     var len = D['te-details'].value.length;
     try { D['te-details'].setSelectionRange(len, len); } catch (e) { /* 某些浏览器对 setRangeText 不支持 */ }
@@ -1751,6 +1755,29 @@
     }
   }
 
+  /* ============ v2.7 Markdown 渲染（预览切换） ============ */
+  function setupMdField(textareaId) {
+    var ta = D[textareaId];
+    if (!ta) return;
+    var preview = document.getElementById(textareaId + '-md');
+    var btn = document.querySelector('.md-toggle[data-target="' + textareaId + '"]');
+    if (!preview || !btn) return;
+    ta.hidden = false; preview.hidden = true; btn.textContent = '预览';
+    btn.addEventListener('click', function () {
+      if (ta.hidden) {                        // 预览态 -> 编辑态
+        ta.hidden = false; preview.hidden = true; btn.textContent = '预览'; ta.focus();
+      } else {                                // 编辑态 -> 预览态
+        var html = window.api.renderMarkdown(ta.value);
+        preview.innerHTML = (html && html.trim()) ? html : '<p class="md-empty">（空）</p>';
+        ta.hidden = true; preview.hidden = false; btn.textContent = '编辑';
+      }
+    });
+    ta._resetMd = function () { ta.hidden = false; preview.hidden = true; btn.textContent = '预览'; };
+  }
+  function setupMarkdownFields() {
+    ['te-details', 'daily-progress', 'daily-issues', 'daily-plan', 'weekly-plan'].forEach(setupMdField);
+  }
+
   async function init() {
     cacheDom();
     initDates();
@@ -1770,6 +1797,7 @@
     renderDaily();
     renderWeekly();
     renderSettings();
+    setupMarkdownFields();
     updateSyncIndicator();
     applyTabUI();
 

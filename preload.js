@@ -3,6 +3,16 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// v2.7 Markdown 渲染：markdown-it 产 HTML，DOMPurify 在渲染进程经真实 DOM 二次净化防 XSS
+let MarkdownLib = null, MarkdownIt = null, DOMPurify = null;
+try {
+  MarkdownLib = require('./src/markdown.js');
+  MarkdownIt = MarkdownLib.makeMarkdownIt();
+  DOMPurify = require('dompurify')(window);
+} catch (e) {
+  console.error('[preload] Markdown 渲染初始化失败，已降级：', e && e.message);
+}
+
 contextBridge.exposeInMainWorld('api', {
   // 数据
   loadTasks: function () { return ipcRenderer.invoke('tasks:load'); },
@@ -36,6 +46,12 @@ contextBridge.exposeInMainWorld('api', {
   getVersion: function () { return ipcRenderer.invoke('app:getVersion'); },
   checkUpdate: function () { return ipcRenderer.invoke('app:checkUpdate'); },
   onUpdate: function (cb) { ipcRenderer.on('app:update-status', function (_e, payload) { cb(payload); }); },
+
+  // v2.7 Markdown 渲染（任务详情 / 日报 / 周报），输出已净化的安全 HTML
+  renderMarkdown: function (src) {
+    if (!MarkdownLib || !MarkdownIt || !DOMPurify) return '';
+    return MarkdownLib.render(src, MarkdownIt, DOMPurify);
+  },
 
   // 主进程 -> 渲染进程
   onRefresh: function (cb) {
