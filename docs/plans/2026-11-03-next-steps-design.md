@@ -28,8 +28,8 @@
 
 ### #3 加链接 → 支持 Markdown 富文本（v2.7，已实现于 feat/v2.7-markdown）
 - 任务与日志支持 Markdown 渲染：链接、加粗、列表、引用、行内/块代码。
-- 渲染管线：`src/markdown.js`（`markdown-it` + `DOMPurify` **双层 XSS 防护**；`html:false` 禁原始 HTML 为第一道，DOMPurify 为第二道；链接强制 `target=_blank rel=noopener`）。
-- 经 preload `window.api.renderMarkdown` 暴露给渲染进程（contextIsolation 下安全；调用处带 try/catch 优雅降级为空白，**不拖垮 api 桥接**）。
+- 渲染管线：`src/markdown.js`（`markdown-it` + `DOMPurify` **双层 XSS 防护**；`html:false` 禁原始 HTML 为第一道，DOMPurify 为第二道；链接强制 `target=_blank rel=noopener noreferrer`）。
+- 经 preload `window.api.renderMarkdown` 暴露给渲染进程（contextIsolation 下安全；preload 桥接内以 try/catch 兜底，调用方拿到 `''` 即安全降级，**不拖垮 api 桥接**）。
 - 存储：只存**原始 Markdown 源码**进现有 JSON，云同步（v3.0）零冲突。
 - 编辑模型（已定，**预览切换**）：每个文本域「预览/编辑」切换——默认源码态，点「预览」就地渲染成手账样式；保存逻辑不变（读 `textarea.value`）；任务列表备注首行亦渲染。
 - 视觉（frontend-design，活版印刷手账风）：衬线标题+细墨线、火漆色「–」列表记号、强调色下划线链接、加重墨色加粗、贴纸描边代码块、左侧火漆规引用；预览容器有高度上限可滚动。
@@ -45,7 +45,7 @@
 | 版本 | 包含 | 说明 |
 |---|---|---|
 | **v2.6 本地增强包** | #1 自动更新 + #2 原子写入 + #4 字号缩放 | 纯客户端、无后端依赖；自动更新落地后，后续版本可自动推送给用户 |
-| **v2.7 Markdown 富文本** | #3 Markdown 渲染层（链接/加粗/列表） | 独立的「内容渲染子系统」，建议统一设计，v3.0 展示层复用 |
+| **v2.7 Markdown 富文本** | #3 Markdown 渲染层（链接/加粗/列表/引用/代码块） | 独立的「内容渲染子系统」，建议统一设计，v3.0 展示层复用 |
 | **v3.0 云同步** | 沿用 `feat/v3.0-cloud` 设计 | Markdown/字号属客户端展示，云只同步内容文本，无冲突 |
 
 ## 3. 待定 / 风险
