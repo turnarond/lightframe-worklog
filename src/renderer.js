@@ -949,23 +949,32 @@
     ctInteractive = interactive;
     bridge.setClickThrough(!interactive); // interactive=true => 关闭穿透（窗口可点）
   }
-  var ctOver = null, ctOut = null;
+  var ctMove = null;
   function applyClickThrough(flag) {
     if (typeof bridge.setClickThrough !== 'function') return;
-    if (ctOver) { document.removeEventListener('mouseover', ctOver, true); ctOver = null; }
-    if (ctOut) { document.removeEventListener('mouseout', ctOut, true); ctOut = null; }
+    if (ctMove) { document.removeEventListener('mousemove', ctMove, true); ctMove = null; }
     if (flag) {
-      setOsInteractive(false); // 进入穿透态：OS 忽略窗口（仅手柄区可临时恢复）
+      setOsInteractive(false); // 进入穿透态：OS 忽略窗口（仅手柄/面板/弹窗区临时恢复）
       var zone = '.w-handle, #w-panel, .modal';
-      ctOver = function (e) {
-        if (e.target && e.target.closest && e.target.closest(zone)) setOsInteractive(true);
+      // OS 穿透 + forward 时 e.target 常落在 html/document 上，单靠 mouseover 命中会漏；
+      // 改用 mousemove 持续检测 + 几何兜底，保证鼠标移到手柄上一定能点回来。
+      ctMove = function (e) {
+        var inZone = false;
+        if (e.target && e.target.closest && e.target.closest(zone)) {
+          inZone = true;
+        } else if (typeof e.clientX === 'number') {
+          var nodes = document.querySelectorAll(zone);
+          for (var i = 0; i < nodes.length; i++) {
+            var n = nodes[i];
+            if (n.hidden || n.offsetParent === null) continue;
+            var r = n.getBoundingClientRect();
+            if (e.clientX >= r.left && e.clientX <= r.right &&
+                e.clientY >= r.top && e.clientY <= r.bottom) { inZone = true; break; }
+          }
+        }
+        setOsInteractive(inZone);
       };
-      ctOut = function (e) {
-        var to = e.relatedTarget;
-        if (!(to && to.closest && to.closest(zone))) setOsInteractive(false);
-      };
-      document.addEventListener('mouseover', ctOver, true);
-      document.addEventListener('mouseout', ctOut, true);
+      document.addEventListener('mousemove', ctMove, true);
     } else {
       setOsInteractive(true); // 关闭穿透：窗口完全可交互
     }
@@ -1738,6 +1747,15 @@
   }
 
   function subscribeBridge() {
+    // 托盘「恢复可交互」逃生口：无条件退出穿透态
+    if (typeof bridge.onForceInteractive === 'function') {
+      bridge.onForceInteractive(function () {
+        state.settings.widget.clickThrough = false;
+        applyWidgetStyle();
+        applyClickThrough(false);
+        apiCall('saveSettings', null, state.settings);
+      });
+    }
     if (typeof bridge.onRefresh === 'function') {
       bridge.onRefresh(async function () {
         try {

@@ -19,6 +19,7 @@ const {
 const { createTaskStore, createLogStore, createSettingsStore, createSyncMetaStore, DEFAULT_SETTINGS } =
   require('./src/store.js');
 const { createSyncBridge } = require('./src/syncBridge.js');
+const { normalizeStartupSettings } = require('./src/startupSettings.js');
 const AuthClient = require('./src/authClient.js');
 
 // v2.6 自动更新：electron-updater 为可选依赖，未安装时优雅降级（检查更新走占位提示）
@@ -130,7 +131,11 @@ function createMainWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Electron 20+ 默认沙箱化 preload，受限 require 无法加载 markdown-it / dompurify /
+      // ./src/markdown.js，会让 v2.7 的 Markdown 渲染在打包版静默降级为空白。
+      // 页面仍受 contextIsolation + nodeIntegration:false 约束，无法访问 Node。
+      sandbox: false
     }
   });
 
@@ -141,10 +146,8 @@ function createMainWindow() {
   mainWindow.loadFile('index.html');
   mainWindow.setAlwaysOnTop(true);
 
-  // 2.5.1：启动时若上次处于穿透态，恢复 OS 级鼠标穿透
-  if (settings && settings.widget && settings.widget.clickThrough) {
-    try { mainWindow.setIgnoreMouseEvents(true, { forward: true }); } catch (err) { /* 忽略 */ }
-  }
+  // 启动一律为普通可交互窗口；显式复位，防止任何历史路径遗留 OS 级鼠标穿透
+  try { mainWindow.setIgnoreMouseEvents(false); } catch (err) { /* 忽略 */ }
 
   // 位置变化后落盘，下次启动回到原位
   mainWindow.on('moved', function () {
@@ -201,7 +204,8 @@ function showQuickAdd() {
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
-        nodeIntegration: false
+        nodeIntegration: false,
+        sandbox: false // 同主窗口：preload 需加载 Markdown 渲染依赖
       }
     });
 
@@ -228,11 +232,28 @@ function showQuickAdd() {
 }
 
 // ---------- 托盘 ----------
+// 逃生口：穿透态失灵时，从系统托盘无条件恢复可交互（OS 级复位 + 通知渲染端 + 清理状态）
+function forceInteractive() {
+  settings.widget = settings.widget || {};
+  settings.widget.clickThrough = false;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.setIgnoreMouseEvents(false); } catch (err) { /* 忽略 */ }
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  sendToMain('widget:forceInteractive');
+  persistSettings();
+}
+
 function buildTrayMenu() {
   return Menu.buildFromTemplate([
     {
       label: '显示主窗口',
       click: function () { showMainWindow(); }
+    },
+    {
+      label: '恢复可交互（退出穿透）',
+      click: function () { forceInteractive(); }
     },
     {
       label: '今天日报',
@@ -432,6 +453,8 @@ function registerIpc() {
 
   ipcMain.handle('settings:save', async function (_event, next) {
     const merged = Object.assign({}, settings, next || {});
+    // 穿透态只作为会话内临时状态，不落盘，避免下次启动读到 true
+    merged.widget = Object.assign({}, merged.widget || {}, { clickThrough: false });
     settings = merged;
     await persistSettings();
     applyAllSettings();
@@ -629,6 +652,9 @@ async function bootstrap() {
     console.warn('[settings] 读取失败，使用默认值：', err && err.message);
     settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   }
+  // 每次启动强制回到「普通可交互」形态：穿透（壁纸）态不跨启动保留。
+  // 否则残留的 clickThrough:true 会让整窗在启动时吞掉所有点击且无出口。
+  settings = normalizeStartupSettings(settings);
 
   // v3.0：若已登录过，恢复鉴权，使重启后的本地改动能继续自动同步
   if (settings.account && settings.account.token && settings.serverUrl && syncBridge) {

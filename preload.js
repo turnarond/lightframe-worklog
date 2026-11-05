@@ -70,5 +70,11 @@ contextBridge.exposeInMainWorld('api', {
     const handler = function (_event, tab) { cb(tab); };
     ipcRenderer.on('open-tab', handler);
     return function () { ipcRenderer.removeListener('open-tab', handler); };
+  },
+  onForceInteractive: function (cb) {
+    if (typeof cb !== 'function') return function () {};
+    const handler = function () { cb(); };
+    ipcRenderer.on('widget:forceInteractive', handler);
+    return function () { ipcRenderer.removeListener('widget:forceInteractive', handler); };
   }
 });
