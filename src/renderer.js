@@ -36,9 +36,12 @@
     closeToTray: true,
     hotkey: 'Ctrl+Shift+Space',
     weeklyPlans: {},
+    account: null,
+    serverUrl: '',
     widget: {
       opacity: 0.9,
       blur: 14,
+      scale: 1,
       clickThrough: false,
       expanded: false,
       rect: null
@@ -139,16 +142,30 @@
   /* ============ 提示 ============ */
 
   var toastTimer = null;
-  function showToast(message, kind) {
+  function showToast(message, kind, action) {
     var node = D.toast;
     if (!node) return;
-    node.textContent = message;
+    node.textContent = '';
+    node.appendChild(document.createTextNode(message));
+    if (action && action.label && typeof action.run === 'function') {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-action';
+      btn.textContent = action.label;
+      btn.addEventListener('click', function () {
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = null;
+        node.className = 'toast' + (kind ? ' ' + kind : '');
+        action.run();
+      });
+      node.appendChild(btn);
+    }
     node.className = 'toast show' + (kind ? ' ' + kind : '');
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(function () {
       node.className = 'toast' + (kind ? ' ' + kind : '');
       toastTimer = null;
-    }, 2200);
+    }, action ? 6000 : 2200);
   }
 
   /* ============ IPC 包装 ============ */
@@ -166,6 +183,16 @@
       return fallback;
     }
   }
+
+  // 写操作专用：失败返回 false 并明确提示，避免「落盘失败却报已保存」
+  var writeApi = (window.ApiWrite && window.ApiWrite.createWriter)
+    ? window.ApiWrite.createWriter(bridge, {
+        onError: function (method, err) {
+          console.error('[光影] ' + method + ' 写入失败', err);
+          showToast((API_LABEL[method] || '保存') + '失败，改动可能未保存，请重试', 'error');
+        }
+      })
+    : function () { return Promise.resolve(true); };
 
   async function copyText(text, okMessage) {
     if (typeof bridge.copyText !== 'function') {
@@ -202,6 +229,7 @@
     var widget = {
       opacity: typeof sw.opacity === 'number' ? sw.opacity : dw.opacity,
       blur: typeof sw.blur === 'number' ? sw.blur : dw.blur,
+      scale: typeof sw.scale === 'number' ? sw.scale : dw.scale,
       clickThrough: typeof sw.clickThrough === 'boolean' ? sw.clickThrough : dw.clickThrough,
       expanded: typeof sw.expanded === 'boolean' ? sw.expanded : dw.expanded,
       rect: (sw.rect && typeof sw.rect.x === 'number' && typeof sw.rect.y === 'number') ? sw.rect : null
@@ -217,12 +245,15 @@
       lastReminded: source.lastReminded && typeof source.lastReminded === 'object' ? source.lastReminded : {},
       weeklyPlans: source.weeklyPlans && typeof source.weeklyPlans === 'object' && !Array.isArray(source.weeklyPlans)
         ? source.weeklyPlans : {},
+      account: source.account && typeof source.account === 'object' && !Array.isArray(source.account)
+        ? source.account : defaults.account,
+      serverUrl: typeof source.serverUrl === 'string' ? source.serverUrl : defaults.serverUrl,
       widget: widget
     };
   }
 
   async function persistSettings() {
-    await apiCall('saveSettings', null, state.settings);
+    return writeApi('saveSettings', state.settings);
   }
 
   async function patchSettings(partial) {
@@ -364,9 +395,9 @@
 
     renderTasks();
     renderWidget();
-    await apiCall('saveTasks', null, state.tasks);
+    var saved = await writeApi('saveTasks', state.tasks);
     await persistSettings();
-    showToast('已记下');
+    if (saved) showToast('已记下');
     titleInput.focus();
   }
 
@@ -437,7 +468,7 @@
       updateTask(task.id, { priority: prio.value });
     });
 
-    meta.appendChild(dateInput);
+    meta.appendChild(dateTrigger);
     meta.appendChild(prio);
     body.appendChild(meta);
 
@@ -515,7 +546,7 @@
     renderWidget();
     if (state.tab === 'daily') renderDailySummary();
     if (state.tab === 'weekly') renderWeekly();
-    apiCall('saveTasks', null, state.tasks);
+    writeApi('saveTasks', state.tasks);
   }
 
   function updateTask(id, patch) {
@@ -527,7 +558,7 @@
     renderTasks();
     renderWidget();
     if (state.tab === 'weekly') renderWeekly();
-    apiCall('saveTasks', null, state.tasks);
+    writeApi('saveTasks', state.tasks);
   }
 
   function deleteTask(id) {
@@ -540,8 +571,32 @@
     renderWidget();
     if (state.tab === 'daily') renderDailySummary();
     if (state.tab === 'weekly') renderWeekly();
-    apiCall('saveTasks', null, state.tasks);
-    showToast('已删除「' + (task ? task.title : '') + '」');
+
+    writeApi('saveTasks', state.tasks).then(function (saved) {
+      if (!saved) return;   // 失败提示由 writeApi 统一给出，不谎报成功
+      var title = task ? task.title : '';
+      showToast('已删除「' + title + '」', 'ok', {
+        label: '撤销',
+        run: function () {
+          // 只清这一条的墓碑，保留删除后用户可能新增的任务
+          var ts = Date.now();
+          var next = state.tasks.map(function (t) {
+            return t && t.id === id
+              ? Object.assign({}, t, { deletedAt: null, updatedAt: ts })
+              : t;
+          });
+          writeApi('saveTasks', next).then(function (ok) {
+            if (!ok) return;
+            state.tasks = next;
+            renderTasks();
+            renderWidget();
+            if (state.tab === 'daily') renderDailySummary();
+            if (state.tab === 'weekly') renderWeekly();
+            showToast('已恢复「' + title + '」', 'ok');
+          });
+        }
+      });
+    });
   }
 
   /* ============ 任务详情编辑 ============ */
@@ -616,8 +671,7 @@
     renderWidget();
     if (state.tab === 'daily') renderDailySummary();
     if (state.tab === 'weekly') renderWeekly();
-    await apiCall('saveTasks', null, state.tasks);
-    showToast('已保存');
+    if (await writeApi('saveTasks', state.tasks)) showToast('已保存');
   }
 
   async function deleteFromEditor() {
@@ -1088,7 +1142,10 @@
     if (blank && !state.logs[date]) return;
 
     state.logs[date] = entry;
-    await apiCall('saveLogs', null, state.logs);
+    if (!await writeApi('saveLogs', state.logs)) {
+      setSaveHint(D['daily-hint'], '保存失败，请重试', false);
+      return;
+    }
 
     setSaveHint(D['daily-hint'], '已自动保存', true);
     if (dailyHintTimer) clearTimeout(dailyHintTimer);
@@ -1235,7 +1292,11 @@
       state.settings.weeklyPlans = {};
     }
     state.settings.weeklyPlans[key] = D['weekly-plan'].value;
-    await persistSettings();
+    if (!await persistSettings()) {
+      weeklyDirty = true;   // 允许下次重试
+      setSaveHint(D['weekly-hint'], '保存失败，请重试', false);
+      return;
+    }
     setSaveHint(D['weekly-hint'], '已保存', true);
     setTimeout(function () { setSaveHint(D['weekly-hint'], '计划改动自动保存', false); }, 2000);
   }
@@ -1268,7 +1329,8 @@
     D['app-version'].textContent = 'v' + (state.appVersion || '…');
     if (!state.appVersionFetched) {
       state.appVersionFetched = true;
-      apiCall('getVersion', '2.5.1').then(function (v) {
+      apiCall('getVersion', null).then(function (v) {
+        if (!v) { if (D['app-version']) D['app-version'].textContent = 'v—'; return; }
         state.appVersion = v;
         if (D['app-version']) D['app-version'].textContent = 'v' + v;
       });
@@ -1276,7 +1338,7 @@
   }
 
   function checkForUpdate() {
-    apiCall('checkUpdate', { version: state.appVersion || '2.5.1', available: false }).then(function (res) {
+    apiCall('checkUpdate', { available: false, message: '检查更新失败，请稍后重试' }).then(function (res) {
       var msg = (res && res.message) ? res.message : '已是最新版本';
       showToast(msg, res && res.available ? 'ok' : 'info');
     });
@@ -1335,7 +1397,7 @@
     if (!btn) return;
     var logged = !!(state.account && state.account.email);
     btn.classList.toggle('is-on', logged);
-    btn.title = logged ? ('已登录：' + state.account.email + '（点击设置）') : '账号与同步';
+    btn.title = logged ? ('已登录：' + state.account.email + '（点击打开设置）') : '账号与同步设置';
   }
 
   function emailOk(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || ''); }
@@ -1772,8 +1834,13 @@
       });
     }
     if (typeof bridge.onOpenTab === 'function') {
-      bridge.onOpenTab(function (tab) {
-        if (typeof tab === 'string') switchTab(tab);
+      bridge.onOpenTab(async function (tab) {
+        if (typeof tab !== 'string') return;
+        // 外部跳转（托盘/全局入口）在收起态也必须可见，否则点了没反应
+        if (['task', 'daily', 'weekly'].indexOf(tab) >= 0 && !state.settings.widget.expanded) {
+          await toggleExpand();
+        }
+        await switchTab(tab);
       });
     }
   }
@@ -1858,5 +1925,10 @@
     if (state.settings.alwaysOnTop) apiCall('setAlwaysOnTop', null, true);
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', function () {
+    init().catch(function (err) {
+      console.error('[光影] 初始化失败', err);
+      if (window.InitError) window.InitError.showInitError(document, err);
+    });
+  });
 })();

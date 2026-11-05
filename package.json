@@ -9,6 +9,7 @@
     "start": "electron .",
     "test": "node --test src/*.test.js",
     "icon": "node tools/genicon.js",
+    "smoke": "node tools/smoke-ui.js",
     "dist": "electron-builder --win nsis",
     "dist:portable": "electron-builder --win portable",
     "release": "electron-builder --win nsis --publish=always"
