@@ -5,10 +5,11 @@ const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
 const TaskModel = require('./taskModel.js');
+const DEFAULT_CATEGORIES = require('./defaultCategories.js');
 
 const DEFAULT_SETTINGS = {
-  categories: ['工作', '会议', '其他'],
-  lastCategory: '工作',
+  categories: DEFAULT_CATEGORIES.slice(),
+  lastCategory: DEFAULT_CATEGORIES[0],
   launchAtLogin: true,
   alwaysOnTop: true,
   closeToTray: true,

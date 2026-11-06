@@ -108,9 +108,9 @@ body::before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
 
-.app-head, .tabs, .app-main, .modal, .toast { position: relative; z-index: 1; }
+.tabs, .app-main, .modal, .toast { position: relative; z-index: 1; }
 
-/* ---------- 顶栏控件（.icon-btn 仍用于面板/设置，保留；.app-head 等旧 chrome 已移除） ---------- */
+/* ---------- 顶栏控件（.icon-btn 用于面板/设置） ---------- */
 
 .icon-btn {
   width: 26px;
@@ -131,14 +131,6 @@ body::before {
 .icon-btn:hover { color: var(--accent); border-color: var(--accent-soft); background: #fffdf8; }
 .icon-btn:active { transform: scale(.94); }
 .icon-btn.sm { width: 22px; height: 22px; border-radius: 7px; font-size: 0.7857rem; }
-
-/* 置顶开启态：像按下的火漆按钮 */
-.icon-btn[aria-pressed="true"] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  box-shadow: 0 3px 8px rgba(194, 97, 63, .3);
-}
 
 /* ---------- Tab ---------- */
 .tabs {
@@ -564,22 +556,7 @@ textarea:focus-visible,
   letter-spacing: .02em;
 }
 
-/* 行内日期 / 优先级：平时像文字，hover 才显出输入框轮廓 */
-.date-mini {
-  width: 108px;
-  padding: 1px 3px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-soft);
-  font-family: var(--mono);
-  font-size: 0.7143rem;
-  transition: border-color .16s, background .16s;
-}
-.date-mini:hover { border-color: var(--line); background: #fffdf8; }
-.date-mini::-webkit-calendar-picker-indicator { opacity: .42; cursor: pointer; }
-.date-mini.overdue { color: var(--p-high); font-weight: 500; }
-
+/* 行内优先级：平时像文字，hover 才显出输入框轮廓 */
 .prio-mini {
   width: auto;
   min-width: 44px;
@@ -942,13 +919,8 @@ textarea:focus-visible,
 }
 .set-row:last-child { border-bottom: none; }
 .set-row .lbl { font-size: 0.8929rem; color: var(--ink); }
-.time-mini { margin-left: auto; width: 88px; font-family: var(--mono); font-size: 0.7857rem; padding: 3px 5px; }
-.time-mini:disabled { opacity: .45; cursor: not-allowed; }
-/* 时间框之后的开关贴着它，不再重复吃掉剩余空间 */
-.set-row .time-mini + .switch { margin-left: 8px; }
 
-#set-hotkey,
-.readonly {
+#set-hotkey {
   margin-left: auto;
   width: 148px;
   padding: 3px 7px;
@@ -962,15 +934,12 @@ textarea:focus-visible,
   outline: none;
 }
 #set-hotkey:focus { border-color: var(--accent); }
-.readonly { color: var(--ink-soft); }
 .set-tip {
   margin: 6px 0 0;
   font-size: 0.75rem;
   line-height: 1.5;
   color: var(--ink-soft);
 }
-
-/* 旧顶栏时钟样式（app-head 已移除；手柄时钟改用 .w-clock） */
 
 /* ---------- 任务行：详情预览 + 编辑按钮 ---------- */
 .task .note {
@@ -1113,6 +1082,9 @@ textarea:focus-visible,
   box-shadow: 0 8px 20px rgba(44, 38, 32, .3);
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* 带撤销按钮的提示必须可点击；默认 toast 不拦截鼠标 */
+.toast.actionable { pointer-events: auto; }
+.toast.info { background: var(--ink-soft); }
 
 /* ===========================================================
    桌面挂件壳（v2.0.0）
@@ -1333,8 +1305,7 @@ body.expanded .w-tlist { max-height: 116px; }
   line-height: 1.75;
   color: var(--ink);
 }
-.ai-text:empty::before,
-.ai-text[data-empty] { color: var(--ink-soft); }
+.ai-text:empty::before { color: var(--ink-soft); }
 
 /* ---------- 入场序列 ---------- */
 .reveal {
@@ -1355,7 +1326,6 @@ body.ready .reveal { opacity: 1; transform: none; }
   .tabs { margin: 0 12px 8px; }
   .app-main { padding: 2px 12px 16px; }
   .task .meta { gap: 5px; }
-  .date-mini { width: 96px; }
 }
 
 /* ---------- 降低动效 ---------- */

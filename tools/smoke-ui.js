@@ -176,6 +176,8 @@ async function main() {
     await ev("document.querySelector('#task-groups .task .del').click(); true");
     await sleep(500);
     results['删除后提供撤销入口'] = await ev("!!document.querySelector('.toast-action')");
+    results['撤销提示可被鼠标点击'] =
+      await ev("(function(){var t=document.getElementById('toast');return t.classList.contains('actionable') && getComputedStyle(t).pointerEvents!=='none';})()");
     await ev("document.querySelector('.toast-action') && document.querySelector('.toast-action').click(); true");
     await sleep(700);
     results['撤销后任务恢复'] = await ev("document.querySelectorAll('#task-groups .task').length >= 1");

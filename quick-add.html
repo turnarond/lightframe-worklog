@@ -139,7 +139,7 @@
   <input id="title" type="text" autocomplete="off" spellcheck="false" placeholder="记点什么… 回车保存" />
 
   <div class="row">
-    <span class="chip" id="catChip" title="沿用上次分类">· 工作</span>
+    <span class="chip" id="catChip" title="沿用上次分类">· —</span>
     <label for="priority">优先级</label>
     <select id="priority">
       <option value="high">高</option>
@@ -149,8 +149,9 @@
     <span class="hint"><kbd>Esc</kbd> 取消</span>
   </div>
 
-  <div class="status" id="status"></div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
 
+  <script src="src/defaultCategories.js"></script>
   <script src="src/taskModel.js"></script>
   <script>
     (function () {
@@ -161,7 +162,7 @@
       const catChip = document.getElementById('catChip');
       const statusEl = document.getElementById('status');
 
-      let category = '工作';
+      let category = (window.DefaultCategories || [])[0] || '未分类';
       let busy = false;
 
       function flash(text) {

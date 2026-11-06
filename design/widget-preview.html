@@ -50,9 +50,6 @@
     overflow: hidden;
     user-select: none;
   }
-  .widget.clickthrough { pointer-events: none; }
-  .widget.clickthrough .handle { pointer-events: auto; }
-
   .handle {
     height: 22px;
     display: flex;
@@ -180,7 +177,6 @@
     <h3>设计预览控制台</h3>
     <label>透明度 <input type="range" id="op" min="0.4" max="1" step="0.05" value="0.9"></label>
     <label>背景模糊 <input type="range" id="blur" min="0" max="24" step="1" value="14"></label>
-    <label><input type="checkbox" id="ct"> 鼠标穿透（空闲时仅手柄可拖拽）</label>
     <p class="hint">这是「前端设计」静态原型，用于确认外观与布局，尚未接入真实数据。
       拖动手柄可移动挂件；双击某天模拟「新建」、双击任务模拟「编辑」。</p>
   </div>
@@ -319,10 +315,6 @@
   document.getElementById('blur').addEventListener('input', function (e) {
     document.documentElement.style.setProperty('--glass-blur', e.target.value + 'px');
   });
-  document.getElementById('ct').addEventListener('change', function (e) {
-    document.getElementById('widget').classList.toggle('clickthrough', e.target.checked);
-  });
-
   renderHead(); renderCal(); renderToday();
 })();
 </script>

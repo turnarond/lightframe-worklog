@@ -215,7 +215,7 @@
         <h3>分类管理</h3>
         <div class="chips" id="cat-chips"></div>
         <div class="cat-add">
-          <input id="cat-input" type="text" maxlength="20" placeholder="新分类名，如「光影集」" aria-label="新分类名" />
+          <input id="cat-input" type="text" maxlength="20" placeholder="新分类名，如「项目 A」" aria-label="新分类名" />
           <button class="btn-mini" id="cat-add" type="button">添加</button>
         </div>
       </section>
@@ -309,7 +309,7 @@
   <div class="modal-backdrop" id="te-backdrop"></div>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="te-title-label">
     <header class="modal-head">
-      <h2>任务详情</h2>
+      <h2 id="te-title-label">任务详情</h2>
       <button class="icon-btn sm" id="te-close" type="button" aria-label="关闭">✕</button>
     </header>
     <div class="modal-body">
@@ -352,6 +352,7 @@
   </div>
 </div>
 
+<script src="src/defaultCategories.js"></script>
 <script src="src/editor.js"></script>
 <script src="src/taskModel.js"></script>
 <script src="src/report.js"></script>

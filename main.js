@@ -605,7 +605,7 @@ function registerIpc() {
   ipcMain.handle('app:checkUpdate', function () {
     var v = app.getVersion();
     if (!autoUpdater) {
-      return { version: v, available: false, message: '当前已是最新版本 v' + v + '；自动更新尚未配置（v2.6 将启用）。' };
+      return { version: v, available: false, message: '当前版本 v' + v + '；自动更新组件未安装，暂无法检查更新。' };
     }
     try { autoUpdater.checkForUpdates().catch(function () {}); } catch (e) {}
     return { version: v, available: null, message: '正在检查更新…' };

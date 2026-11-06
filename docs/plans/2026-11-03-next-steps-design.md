@@ -1,57 +1,105 @@
-# 下一步规划（v2.6 / v2.7 / v3.0）
+# 下一步规划与实施记录（v2.6 / v2.7 / v3.0）
 
-> 日期：2026-11-03
+> 初始日期：2026-11-03；最近更新：2026-11-06
 > 方式：brainstorming 逐条讨论「做不做、做到什么程度」，最后归纳版本。
-> 范围：版本升级 / 数据存储导出 / 加链接 / 字体颜色 四块。
+> 原始范围：版本升级 / 数据存储 / 加链接 / 字体颜色 四块；§4 追加 2026-11-05~06 的 UI 评审与修复记录。
 
-## 0. 背景与现状（事实核查）
+## 0. 背景与现状（事实核查，按 2026-11-06 更新）
 
-- **存储**：Electron `userData` 目录下 4 个本地 JSON，经主进程 IPC 读写（`settings:load/save` 等），`fs.promises` 异步，无 DB、无导出/导入、无加密：
-  - `tasks.json`（任务，已预留 `updatedAt`/`deletedAt` 软删，为 v3 同步准备）
-  - `dailyLogs.json`（日报/周报）
-  - `settings.json`（设置，含 widget 透明度/穿透/位置）
-  - `syncmeta.json`（同步游标，v3 云同步专用）
-- **版本**：已有 SemVer（`package.json` 版本号）+ `CHANGELOG.md` + 手工打包（portable 单文件 exe、NSIS 安装版）。
-- **v3.0 云同步**：已在 `feat/v3.0-cloud` 分支有设计稿 `docs/plans/2026-11-01-cloud-sync-v3.md` 与半成品 `src/syncBridge.js`（含 `SYNCABLE_PREFS` 偏好子集同步框架）。
+- **存储**：Electron `userData` 目录下 4 个本地 JSON，经主进程 IPC 读写，采用 temp + rename 原子写入，无 DB、无导出/导入、无加密：
+  - `tasks.json`（任务，含 `updatedAt` / `deletedAt` 软删墓碑）
+  - `dailyLogs.json`（日报 / 周报）
+  - `settings.json`（设置，含 widget 透明度 / 位置 / 字号缩放；壁纸穿透字段已废弃并在启动时清理）
+  - `syncmeta.json`（同步游标，v3 云同步用）
+- **版本与分发**：`package.json` SemVer（当前 `2.5.1`）+ `CHANGELOG.md`；NSIS 安装版为主，portable 为绿色版；`npm run dist` 本地打包、`npm run release` 自动发 Release。
+- **仓库**：`turnarond/lightframe-worklog`；本地 `master` 与远程默认分支 `main` 同步推送，v2.6 / v2.7 feature 分支已清理。
+- **v3.0 云同步**：设计稿 `docs/plans/2026-11-01-cloud-sync-v3.md` + `src/syncBridge.js`（`SYNCABLE_PREFS` 偏好子集同步框架）；后端 / 鉴权骨架已在 `master` 历史中，尚未作为产品发布。
 
 ## 1. 决策记录（逐条）
 
 ### #1 版本管理 / 升级 → 只做自动更新
-- 接入 `electron-updater` + GitHub Releases（或自建静态托管）。
-- **NSIS 安装版**静默自更新；**portable 单文件版**只弹「有新版本，去下载」提示（无安装目录、无法自我替换）。
+- 接入 `electron-updater` + GitHub Releases。**NSIS 安装版**静默自更新；**portable 单文件版**只弹「有新版本，去下载」提示。
 - 结论：**分发以 NSIS 安装版为主**，portable 退居「绿色版」定位。
-- **决议（2026-11-04）**：正式采用 `electron-updater` + **公开 GitHub Releases**，仓库 `turnarond/lightframe-worklog`（`publish` 已配置）。`package.json` 的 `release` 脚本 = `electron-builder --win nsis --publish=always`，发版时 `GH_TOKEN=<token> npm run release` 一条出 Release（含 `latest.yml` / `.blockmap` / 安装包）。**代码签名暂缓**：更新/安装时仍弹 SmartScreen 警告，用户点「仍要运行」可过，与手动下载同体验；零警告留待后续评估付费证书。
+- **决议（2026-11-04）**：采用 `electron-updater` + **公开 GitHub Releases**，仓库 `turnarond/lightframe-worklog`。`release` 脚本 = `electron-builder --win nsis --publish=always`；发版时 `GH_TOKEN=<token> npm run release` 一条产出 Release（含 `latest.yml` / `.blockmap` / 安装包）。**代码签名暂缓**：安装 / 更新仍弹 SmartScreen，点「仍要运行」可过。
+- **状态（2026-11-06）**：✅ 依赖、`publish` 配置、检查更新入口、发布脚本均已落地；尚未执行过实际发版（`version` 仍为 `2.5.1`、未上传 Release）。
 
 ### #2 数据存储 / 导出 → 暂不做导出 UI，只补原子写入
-- 不做导出/导入界面（v3 云同步上线后天然成为备份；此前可由用户手动复制 `userData` 文件夹兜底）。
-- `src/store.js` 改为**写临时文件再 `rename`** 的原子写入，防止写到一半崩溃/断电导致单文件损坏全丢。最低成本健壮性提升。
+- 不做导出 / 导入界面（v3 云同步上线后天然成为备份；此前可手动复制 `userData` 文件夹兜底）。
+- `src/store.js` 改为**写临时文件再 `rename`** 的原子写入，防止半写崩溃导致单文件损坏全丢。
+- **状态**：✅ 已落地。
 
-### #3 加链接 → 支持 Markdown 富文本（v2.7，已实现于 feat/v2.7-markdown）
-- 任务与日志支持 Markdown 渲染：链接、加粗、列表、引用、行内/块代码。
+### #3 加链接 → 支持 Markdown 富文本（v2.7）
+- 任务与日志支持 Markdown 渲染：链接、加粗、列表、引用、行内 / 块代码。
 - 渲染管线：`src/markdown.js`（`markdown-it` + `DOMPurify` **双层 XSS 防护**；`html:false` 禁原始 HTML 为第一道，DOMPurify 为第二道；链接强制 `target=_blank rel=noopener noreferrer`）。
-- 经 preload `window.api.renderMarkdown` 暴露给渲染进程（contextIsolation 下安全；preload 桥接内以 try/catch 兜底，调用方拿到 `''` 即安全降级，**不拖垮 api 桥接**）。
+- 经 preload `window.api.renderMarkdown` 暴露（preload 桥接内以 try/catch 兜底，调用方拿到 `''` 即安全降级，**不拖垮 api 桥接**）。
 - 存储：只存**原始 Markdown 源码**进现有 JSON，云同步（v3.0）零冲突。
-- 编辑模型（已定，**预览切换**）：每个文本域「预览/编辑」切换——默认源码态，点「预览」就地渲染成手账样式；保存逻辑不变（读 `textarea.value`）；任务列表备注首行亦渲染。
-- 视觉（frontend-design，活版印刷手账风）：衬线标题+细墨线、火漆色「–」列表记号、强调色下划线链接、加重墨色加粗、贴纸描边代码块、左侧火漆规引用；预览容器有高度上限可滚动。
-- 测试：`src/markdown.test.js` 4 项覆盖第一层 XSS 收敛（script 转义 / 链接 target·rel / 加粗列表 / 空输入），全量 114 测试通过。**第二层（DOMPurify）单测暂以恒等 mock 覆盖，真实 DOM 集成测试待补（需 jsdom）**。
-- 评审（requesting-code-review，2026-11-05）：无 Critical；1 Important（`renderMarkdown` 调用缺 try/catch，已修）+ 数项 Minor（预览高度上限、降级回退纯文本、纯空格占位、DRY 复用）均已修；jsdom 集成测试记为后续。
+- 编辑模型（**预览切换**）：每个文本域「预览 / 编辑」切换，默认源码态；保存逻辑不变（读 `textarea.value`）；任务列表备注首行亦渲染。
+- 视觉（frontend-design，活版印刷手账风）：衬线标题 + 细墨线、火漆色「–」列表记号、强调色下划线链接、加重墨色加粗、贴纸描边代码块、左侧火漆规引用；预览容器有高度上限可滚动。
+- 测试：`src/markdown.test.js` 覆盖第一层 XSS 收敛（script 转义 / 链接 target·rel / 加粗列表 / 空输入）。**第二层（DOMPurify）单测暂以恒等 mock 覆盖，真实 DOM 集成测试待补（需 jsdom）**。
+- 评审（2026-11-05）：无 Critical；1 Important（`renderMarkdown` 调用缺 try/catch，已修）+ 数项 Minor 均已修。
+- **状态**：✅ 已实现、双轮评审通过、合入 `main`。
 
 ### #4 字体 / 颜色 → 仅字号 / 缩放
-- 设置页新增字号/缩放项，存入 `settings`，解决桌面悬浮场景下的可读性。
-- 不开放字体族与配色自定义（保持现状暖纸配色，避免主题系统膨胀）。
+- 设置页新增字号 / 缩放项，存入 `settings`，解决桌面悬浮场景下的可读性。
+- 不开放字体族与配色自定义（保持暖纸配色，避免主题系统膨胀）。
+- **后续实现（2026-11-06）**：缩放改为 `:root` 根字号 `calc(14px * var(--w-scale))` + 全站 `rem` 收敛，覆盖全部文本而非 20 个手写选择器；字体改为**自托管**（Karla / JetBrains Mono / Fraunces 的 woff2 置于 `assets/fonts/`，`@font-face` 引用），移除 Google Fonts 外链。
 
-## 2. 版本规划
+## 2. 版本规划（状态已更新）
 
-| 版本 | 包含 | 说明 |
+| 版本 | 包含 | 状态 |
 |---|---|---|
-| **v2.6 本地增强包** | #1 自动更新 + #2 原子写入 + #4 字号缩放 | 纯客户端、无后端依赖；自动更新落地后，后续版本可自动推送给用户 |
-| **v2.7 Markdown 富文本** | #3 Markdown 渲染层（链接/加粗/列表/引用/代码块） | 独立的「内容渲染子系统」，建议统一设计，v3.0 展示层复用 |
-| **v3.0 云同步** | 沿用 `feat/v3.0-cloud` 设计 | Markdown/字号属客户端展示，云只同步内容文本，无冲突 |
+| **v2.6 本地增强包** | #1 自动更新 + #2 原子写入 + #4 字号缩放 + 穿透态可拖手柄 / 自定义日历 / 壁纸态视觉 | ✅ 已落地并推送；发版动作待执行 |
+| **v2.7 Markdown 富文本** | #3 Markdown 渲染层（链接 / 加粗 / 列表 / 引用 / 代码块） | ✅ 已实现、评审通过、合入主线 |
+| **UI 评审修复（2026-11-05~06）** | P0 首屏断链 + 4 批优化，详见 §4 | ✅ 已合入 `main`，已重新打包 |
+| **v3.0 云同步** | 沿用 `feat/v3.0-cloud` 设计 | ⏸ 设计与骨架就绪，未作为产品发布 |
 
 ## 3. 待定 / 风险
 
-- **发布渠道（已定）**：公开 GitHub Releases，仓库 `turnarond/lightframe-worklog`；发版经 `GH_TOKEN` + `npm run release` 自动建 Release 并上传 `latest.yml` / `.blockmap` / 安装包。
-- **代码签名（暂缓）**：暂不付费签名；更新与安装均会弹 SmartScreen，用户点「仍要运行」可过。若后续要求零警告，再评估 OV/EV 证书接入 `electron-builder` 自动签名。
-- **Markdown 选型与防护**：渲染库选型、`sanitize` 策略、是否支持编辑态预览。
-- **升级顺序收益**：v2.6 先上自动更新，可使 v2.7 / v3.0 直接静默推达，降低用户手动重装成本。
-- **数据迁移**：当前 JSON 直接读写，v3 schema 变更时仍需按 `settings.version` 驱动轻量迁移（本次未纳入范围，留待 v3.0 一并设计）。
+- **发布渠道（已定）**：公开 GitHub Releases，`turnarond/lightframe-worklog`；`GH_TOKEN` + `npm run release` 自动建 Release 并上传 `latest.yml` / `.blockmap` / 安装包。
+- **代码签名（暂缓）**：暂不付费签名；安装 / 更新弹 SmartScreen。若要求零警告，再评估 OV/EV 证书接入自动签名。
+- **发版纪律**：每次发版需先 bump `package.json` 的 `version`，并确保 Release 三个资源文件齐全，否则自动更新静默失败。
+- **Markdown 防护**：选型与双层防护已定；剩余缺口是 jsdom 真实 DOM 的第二层净化集成测试。
+- **数据迁移**：当前 JSON 直接读写，v3 schema 变更时仍需按 `settings.version` 驱动轻量迁移（未纳入本轮范围）。
+- **升级顺序收益**：自动更新先就位，后续版本可直接推送，降低手动重装成本——目前链路已通，仅缺首次发版。
+
+## 4. 实施记录（2026-11-05 ~ 11-06）
+
+### 4.1 起点：界面功能设计评审
+用 `frontend-design` 通读 `index.html`（约 360 行）、`styles.css`（约 1600 行）、`renderer.js`（约 1900 行）后，按 P0 / P1 / P2 列出优化点。最严重的发现是**任务列表渲染必抛异常**。
+
+### 4.2 第 1 批 · P0 阻断 + 回归防线
+- 根因：`buildTaskRow` 创建了 `dateTrigger`，却 `appendChild(dateInput)`（未定义变量）。只要有任意任务，`renderTasks()` 抛 `ReferenceError`，`init()` 后半段全部跳过：`body.ready` 不添加 → `.reveal` 元素永久 `opacity:0`，任务列表 / 日报 / 周报 / 设置全不渲染。
+- 修复：挂载正确的 `dateTrigger`；`init()` 加 catch + `src/initError.js` 可见错误兜底（追加 `role="alert"` 提示、解除 reveal 隐藏、不清空界面）。
+- 防线：正式化 `tools/smoke-ui.js` + `npm run smoke`，用 CDP 启动**真实打包版**并注入 `unhandledrejection` 钩子；独立 `userData` 绕开与已安装实例的单实例锁，不触碰真实数据。
+
+### 4.3 第 2 批 · 数据可信度
+- `src/apiWrite.js`：写操作返回明确成败，落盘失败**不再**提示「已记下 / 已保存 / 已自动保存」；日报与周计划失败提示重试且保留 dirty 状态。
+- 删除改为成功才提示，并提供 toast「撤销」（6s）；恢复只清该条墓碑，保留期间新增任务。
+- `mergeSettings` 补齐 `scale` / `account` / `serverUrl`（字号重启回退、登录态、服务器地址丢失）；外部跳转自动展开面板；移除硬编码版本号；同步按钮文案诚实化。
+
+### 4.4 第 3 批 · 收起态可达性（方案 A）+ 形态决策
+- 手柄加「日」「周」快捷入口，抽出 `openView()` 一键展开并切 Tab；托盘补「本周周报」；收起态速记条收成单行（`:focus-within` 展开）；删除按钮常驻可见；「回到今天」清筛选。
+- 用户决策：`viewDay` / `filterDate` **合并为单一日期状态**；**壁纸穿透态暂时不留**；**展开态今日任务不得隐藏**；收起态任务加显式编辑按钮与日历双击提示。
+
+### 4.5 第 4 批 · 视觉一致性
+- 字体自托管（6 个 woff2，约 117KB），移除 Google Fonts 外链；Fraunces 真正用于标题西文。
+- 账号区暗色主题残留重配色；`--ink-faint` 重复定义归一；默认透明度四处统一为 `0.9`。
+- 88 处固定 px 字号 + 20 处手写 `calc()` 统一收敛为 `rem` + 根字号；两窗口 CSP 对齐为纯本地资源。
+
+### 4.6 收口 · 文档与 P2 清理
+- 默认分类抽为 `src/defaultCategories.js` 单一数据源（store / renderer / quick-add 共用）。
+- 清理死样式（`.date-mini` / `.time-mini` / `.readonly` / `.app-head` / `.icon-btn[aria-pressed]` / `.ai-text[data-empty]`）、补 `.toast.info`、修「撤销按钮被 `pointer-events:none` 吞掉」的真实缺陷、移除过期占位文案与历史设计稿里的穿透开关。
+- 新增 `src/cleanup.test.js` 作为配置 / 文档一致性护栏。
+
+### 4.7 当前形态要点（供后续开发对照）
+- **单一日期状态** `viewDay`：同时驱动挂件今日列表、日历选中态与任务 Tab 筛选；`viewDay === today` 表示不额外筛选，「回到今天」与「清除筛选」是同一动作。
+- **无壁纸穿透态**：窗口始终是普通可交互 app；启动显式 `setIgnoreMouseEvents(false)` 兜底，历史 `clickThrough` 字段在启动时清理。
+- **展开态今日任务常驻**（紧凑高度、可滚动），不随展开被隐藏。
+- **收起态可达**：日报 / 周报快捷入口、托盘跳转自动展开、任务显式编辑按钮、日历格双击提示。
+- **测试体系**：`npm test` 纯逻辑单测；`npm run smoke` 打包版端到端（CDP，独立 userData，含 init 完整性、字体加载、缩放、配色、日期状态、撤销等断言）；`npm run dist` 打包。
+
+### 4.8 剩余待办
+1. jsdom 真实 DOM 的 DOMPurify 第二层净化集成测试。
+2. 首次发版：bump `version` → `GH_TOKEN` + `npm run release` → 验证自动更新链路。
+3. 代码签名（消除 SmartScreen）评估。
+4. v3.0 云同步产品化与 schema 迁移设计。

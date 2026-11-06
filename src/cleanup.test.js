@@ -1,0 +1,51 @@
+'use strict';
+
+const { test } = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const ROOT = path.join(__dirname, '..');
+const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+
+test('默认分类只有一份共享数据源', function () {
+  const cats = require('./defaultCategories.js');
+  const store = require('./store.js');
+  if (JSON.stringify(store.DEFAULT_SETTINGS.categories) !== JSON.stringify(cats)) {
+    throw new Error('store 默认分类应来自共享常量');
+  }
+  if (/categories:\s*\[/.test(read('src/renderer.js'))) {
+    throw new Error('渲染端不应再硬编码分类数组');
+  }
+  if (/let category = '[^']+'/.test(read('quick-add.html'))) {
+    throw new Error('速记窗不应再硬编码兜底分类');
+  }
+});
+
+test('死样式类已清理', function () {
+  const css = read('src/styles.css');
+  ['.date-mini', '.time-mini', '.readonly', '.app-head',
+    '.ai-text[data-empty]', '.icon-btn[aria-pressed="true"]'].forEach(function (sel) {
+    if (css.indexOf(sel) >= 0) throw new Error('残留死样式: ' + sel);
+  });
+});
+
+test('toast.info 有样式定义', function () {
+  if (read('src/styles.css').indexOf('.toast.info') < 0) throw new Error('应补 toast.info 样式');
+});
+
+test('过期自动更新占位文案已移除', function () {
+  if (read('main.js').indexOf('v2.6 将启用') >= 0) throw new Error('过期占位文案仍在');
+});
+
+test('设计预览稿不再含穿透开关', function () {
+  const p = 'design/widget-preview.html';
+  if (!fs.existsSync(path.join(ROOT, p))) return;
+  if (read(p).indexOf('clickthrough') >= 0) throw new Error('设计稿仍有穿透开关');
+});
+
+test('规划文档已同步当前形态', function () {
+  const doc = read('docs/plans/2026-11-03-next-steps-design.md');
+  if (doc.indexOf('含 widget 透明度/穿透/位置') >= 0) throw new Error('文档仍把穿透写成在售设置');
+  if (doc.indexOf('实施记录') < 0) throw new Error('文档缺少实施记录章节');
+  if (doc.indexOf('单一日期状态') < 0) throw new Error('文档缺少双日期合并记录');
+});

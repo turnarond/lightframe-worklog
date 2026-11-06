@@ -6,12 +6,13 @@
 
   var TM = window.TaskModel;
   var RP = window.Report;
+  var DC = window.DefaultCategories;
   var Editor = window.Editor || { autoBulletOnEnter: function (v, c) { return { value: v, caret: c }; }, cleanDetails: function (t) { return (t || '').trim(); } };
   var bridge = window.api || {};
 
-  if (!TM || !RP) {
+  if (!TM || !RP || !DC) {
     document.addEventListener('DOMContentLoaded', function () {
-      document.body.textContent = '核心模块加载失败，请检查 src/taskModel.js 与 src/report.js。';
+      document.body.textContent = '核心模块加载失败，请检查 src/taskModel.js、src/report.js 与 src/defaultCategories.js。';
     });
     return;
   }
@@ -29,8 +30,8 @@
 
   // 设置读取失败时的兜底（与 SPEC §3 默认值一致）
   var DEFAULT_SETTINGS = {
-    categories: ['光影集', '标准编写', '会议'],
-    lastCategory: '光影集',
+    categories: DC.slice(),
+    lastCategory: DC[0],
     launchAtLogin: true,
     alwaysOnTop: true,
     closeToTray: true,
@@ -143,6 +144,8 @@
   function showToast(message, kind, action) {
     var node = D.toast;
     if (!node) return;
+    // 带可点动作的提示需要 actionable 类，否则被 .toast 的 pointer-events:none 吞掉
+    var cls = 'toast' + (kind ? ' ' + kind : '') + (action ? ' actionable' : '');
     node.textContent = '';
     node.appendChild(document.createTextNode(message));
     if (action && action.label && typeof action.run === 'function') {
@@ -153,15 +156,15 @@
       btn.addEventListener('click', function () {
         if (toastTimer) clearTimeout(toastTimer);
         toastTimer = null;
-        node.className = 'toast' + (kind ? ' ' + kind : '');
+        node.className = cls;
         action.run();
       });
       node.appendChild(btn);
     }
-    node.className = 'toast show' + (kind ? ' ' + kind : '');
+    node.className = cls + ' show';
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(function () {
-      node.className = 'toast' + (kind ? ' ' + kind : '');
+      node.className = cls;
       toastTimer = null;
     }, action ? 6000 : 2200);
   }
