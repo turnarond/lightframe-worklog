@@ -2,11 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; script-src 'self' 'unsafe-inline'" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>光影工作志</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Karla:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="src/styles.css" />
 </head>
 <body>
@@ -248,14 +246,14 @@
         <div class="set-row">
           <span class="lbl">面板透明度</span>
           <input type="range" id="set-opacity" min="0.2" max="1" step="0.05" aria-label="面板透明度（越小越透）" />
-          <span class="val" id="set-opacity-val">55%</span>
+          <span class="val" id="set-opacity-val">90%</span>
         </div>
         <div class="set-row">
           <span class="lbl">界面字号</span>
           <input type="range" id="set-scale" min="0.85" max="1.4" step="0.05" aria-label="界面字号缩放" />
           <span class="val" id="set-scale-val">100%</span>
         </div>
-        <p class="set-tip">越小越透明、越像桌面背景；调低后配合「👁 鼠标穿透」即可悬浮壁纸态。</p>
+        <p class="set-tip">越小越透明、越像桌面背景；默认 90% 保持普通应用的不透明观感。</p>
       </section>
 
       <section class="set-block" id="acc-block">

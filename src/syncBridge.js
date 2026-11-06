@@ -3,7 +3,7 @@
 
 const Sync = require('./sync.js');
 
-// 仅这些偏好上云；挂件坐标/透明度/穿透/快捷键/开机自启等本机专属不同步
+// 仅这些偏好上云；挂件坐标/透明度/快捷键/开机自启等本机专属不同步
 const SYNCABLE_PREFS = ['categories', 'defaultPriority', 'defaultView', 'theme'];
 
 /**

@@ -183,6 +183,20 @@ async function main() {
     await sleep(700);
     results['外部跳转周报自动展开并切换'] =
       await ev("!document.getElementById('w-panel').hidden && document.getElementById('tab-weekly').getAttribute('aria-selected') === 'true'");
+    results['不再依赖 Google Fonts 外链'] =
+      await ev("document.querySelectorAll('link[href*=\"fonts.googleapis.com\"], link[href*=\"fonts.gstatic.com\"]').length === 0");
+    results['display 字体真正启用 Fraunces'] =
+      await ev("getComputedStyle(document.documentElement).getPropertyValue('--display').indexOf('Fraunces') >= 0");
+    results['自托管字体真实加载成功'] = await ev("(async function(){await document.fonts.ready;var f=Array.from(document.fonts).filter(function(x){return x.status==='loaded';}).map(function(x){return x.family.replace(/['\"]/g,'');});return f.indexOf('Karla')>=0 && f.indexOf('Fraunces')>=0;})()");
+    results['根字号随缩放变化（14px * 1.25 = 17.5px）'] =
+      await ev("getComputedStyle(document.documentElement).fontSize === '17.5px'");
+    results['字号缩放覆盖卡片标题'] = await ev("(function(){var r=document.documentElement;var n=document.querySelector('.card-title');if(!n)return false;r.style.setProperty('--w-scale','1');var a=parseFloat(getComputedStyle(n).fontSize);r.style.setProperty('--w-scale','1.25');var b=parseFloat(getComputedStyle(n).fontSize);return b>a;})()");
+    results['账号输入框改为暖纸可见背景'] =
+      await ev("(function(){var s=getComputedStyle(document.getElementById('acc-server'));return s.backgroundColor.indexOf('255, 255, 255, 0.14')<0;})()");
+    results['默认透明度归一为 0.9'] =
+      await ev("(function(){var m=getComputedStyle(document.body).backgroundColor.match(/rgba?\\([^)]*?,\\s*([\\d.]+)\\)/);return !!m && Math.abs(parseFloat(m[1])-0.9)<0.01;})()");
+    results['两窗口均有 CSP 声明'] =
+      await ev("!!document.querySelector('meta[http-equiv=\"Content-Security-Policy\"]')");
     results['无 console.error'] = consoleErrors.length === 0;
     if (consoleErrors.length) console.log('控制台错误:', consoleErrors.join(' | '));
   } finally {

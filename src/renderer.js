@@ -951,7 +951,7 @@
     fitWidgetHeight();
   }
 
-  // 透明/模糊/穿透/展开 的视觉应用
+  // 透明/模糊/展开 的视觉应用
   function applyWidgetStyle() {
     var w = state.settings.widget;
     var root = document.documentElement;
@@ -1608,7 +1608,7 @@
     if (D['set-opacity']) {
       D['set-opacity'].addEventListener('input', function () {
         var v = parseFloat(this.value);
-        if (!(v > 0)) v = 0.55;
+        if (!(v > 0)) v = 0.9;
         state.settings.widget.opacity = v;
         if (D['set-opacity-val']) D['set-opacity-val'].textContent = Math.round(v * 100) + '%';
         applyWidgetStyle();

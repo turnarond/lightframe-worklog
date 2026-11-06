@@ -25,7 +25,7 @@ test('DEFAULT_SETTINGS: 与 SPEC §3 一致', () => {
   assert.deepEqual(S.DEFAULT_SETTINGS.lastReminded, {});
   assert.deepEqual(S.DEFAULT_SETTINGS.weeklyPlans, {});
   assert.deepEqual(S.DEFAULT_SETTINGS.widget, {
-    opacity: 0.55,
+    opacity: 0.9,
     blur: 14,
     expanded: false,
     rect: null,
