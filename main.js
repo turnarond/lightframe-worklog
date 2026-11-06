@@ -262,6 +262,13 @@ function buildTrayMenu() {
         sendToMain('open-tab', 'daily');
       }
     },
+    {
+      label: '本周周报',
+      click: function () {
+        showMainWindow();
+        sendToMain('open-tab', 'weekly');
+      }
+    },
     { type: 'separator' },
     {
       label: '退出',

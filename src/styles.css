@@ -579,7 +579,7 @@ textarea:focus-visible,
   font-size: 11px;
   line-height: 1.3;
   cursor: pointer;
-  opacity: 0;
+  opacity: .35;
   transition: opacity .15s, color .15s, background .15s;
 }
 .task:hover .del,
@@ -1100,7 +1100,7 @@ textarea:focus-visible,
 .w-handle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 7px 10px;
   -webkit-app-region: drag;
   cursor: grab;
@@ -1139,11 +1139,23 @@ textarea:focus-visible,
 }
 .w-handle .w-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 .w-handle .w-btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+/* 日报 / 周报 快捷入口：单字更省宽度，衬线墨色与图标按钮区分 */
+.w-handle .w-jump {
+  width: 20px;
+  height: 20px;
+  font-family: var(--display);
+  font-weight: 600;
+  color: var(--accent-deep);
+  background: rgba(255, 255, 255, .55);
+}
 
 /* 任务优先：速记条全局置顶（收起/展开都在） */
 .w-compose { padding: 10px 12px 0; }
 .w-compose .quickadd { margin: 0; gap: 7px; padding: 10px 11px 11px; }
 .w-compose .qa-hint { display: none; }
+/* 收起态：速记条只留「输入 + 记下」一行腾出空间；聚焦输入时再展开分类 / 日期 / 优先级 */
+body:not(.expanded) .w-compose .qa-controls { display: none; }
+body:not(.expanded) .w-compose .quickadd:focus-within .qa-controls { display: grid; }
 
 /* 挂件主区：任务列表在前，周导航降级到底部细条 */
 .w-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }

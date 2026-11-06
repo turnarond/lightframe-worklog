@@ -327,6 +327,14 @@
     D['app-main'].scrollTop = 0;
   }
 
+  // 从收起态一步进入某个视图：先展开面板，再切 Tab。
+  // 手柄快捷入口与托盘/主进程的 open-tab 共用，避免「点了没反应」。
+  async function openView(tab) {
+    if (['task', 'daily', 'weekly'].indexOf(tab) < 0) return;
+    if (!state.settings.widget.expanded) await toggleExpand();
+    await switchTab(tab);
+  }
+
   /* ============ 渲染 · 速记条 ============ */
 
   function renderCategorySelect() {
@@ -1571,6 +1579,8 @@
     // 桌面挂件：手柄控件
     D['w-ct'].addEventListener('click', toggleClickThrough);
     D['w-expand'].addEventListener('click', toggleExpand);
+    D['w-daily'].addEventListener('click', function () { openView('daily'); });
+    D['w-weekly'].addEventListener('click', function () { openView('weekly'); });
     D['w-hide'].addEventListener('click', function () {
       if (typeof bridge.hideWindow === 'function') { try { bridge.hideWindow(); } catch (e) { /* 忽略 */ } }
       // P2-#12：明确告知「还在跑，只是收进托盘」
@@ -1604,6 +1614,7 @@
       state.calMonth = Number(parts[1]);
       state.weekAnchor = today;
       state.viewDay = today;
+      if (state.filterDate) setFilter(null);   // 回到今天不应残留旧的日期筛选
       syncQuickDate();
       renderWidget();
     });
@@ -1750,7 +1761,7 @@
       'cat-chips', 'cat-input', 'cat-add',
       'task-editor', 'te-title', 'te-category', 'te-priority', 'te-date', 'te-details',
       'te-save', 'te-cancel', 'te-delete', 'te-close', 'te-backdrop',
-      'w-handle', 'w-clock', 'w-ct', 'w-expand', 'w-hide', 'w-quit', 'w-settings',
+      'w-handle', 'w-clock', 'w-ct', 'w-expand', 'w-daily', 'w-weekly', 'w-hide', 'w-quit', 'w-settings',
       'w-body', 'w-cal', 'panel-cal-slot', 'w-calTitle', 'w-prev', 'w-next', 'w-today', 'w-cal-grid', 'w-todayLabel',
       'w-todayCount', 'w-tlist', 'w-panel',
       'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'set-opacity', 'set-opacity-val', 'set-scale', 'set-scale-val', 'btn-quit', 'toast',
@@ -1833,16 +1844,7 @@
         }
       });
     }
-    if (typeof bridge.onOpenTab === 'function') {
-      bridge.onOpenTab(async function (tab) {
-        if (typeof tab !== 'string') return;
-        // 外部跳转（托盘/全局入口）在收起态也必须可见，否则点了没反应
-        if (['task', 'daily', 'weekly'].indexOf(tab) >= 0 && !state.settings.widget.expanded) {
-          await toggleExpand();
-        }
-        await switchTab(tab);
-      });
-    }
+    if (typeof bridge.onOpenTab === 'function') bridge.onOpenTab(openView);
   }
 
   /* ============ v2.7 Markdown 渲染（预览切换） ============ */

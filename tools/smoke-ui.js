@@ -103,7 +103,7 @@ async function main() {
     origSettings = await ev('window.api.loadSettings().then(function (s) { return JSON.stringify(s || {}); })');
     await ev('window.api.saveTasks([' + JSON.stringify(TASK) + ']).then(function () { return true; })');
     // 预置一个非默认字号，验证渲染端合并器不会在重启后把它丢掉
-    await ev("(async function(){var s=await window.api.loadSettings();s.widget=s.widget||{};s.widget.scale=1.25;await window.api.saveSettings(s);return true;})()");
+    await ev("(async function(){var s=await window.api.loadSettings();s.widget=s.widget||{};s.widget.scale=1.25;s.widget.expanded=false;await window.api.saveSettings(s);return true;})()");
     await send('Page.reload', { ignoreCache: true });
     // 等新文档 init 落地，而不是固定 sleep（隐藏窗口下 rAF 可能被节流）
     for (let i = 0; i < 24; i++) {
@@ -133,16 +133,29 @@ async function main() {
     if (Array.isArray(injected) && injected.length) console.log('页面异常:', injected.join(' | '));
     results['设置字段保留：字号缩放重启后不回退'] =
       await ev("document.getElementById('set-scale').value === '1.25'");
+    results['手柄有日报/周报快捷入口'] =
+      await ev("!!document.getElementById('w-daily') && !!document.getElementById('w-weekly')");
+    results['手柄新增入口后无横向溢出'] =
+      await ev("(function(){var h=document.getElementById('w-handle');return h.scrollWidth <= h.clientWidth + 1;})()");
+    results['收起态速记条默认单行'] =
+      await ev("getComputedStyle(document.querySelector('.qa-controls')).display === 'none'");
+    await ev("document.getElementById('qa-title').focus(); true");
+    results['聚焦速记框后控件展开'] =
+      await ev("getComputedStyle(document.querySelector('.qa-controls')).display !== 'none'");
+    await ev("document.getElementById('w-daily') && document.getElementById('w-daily').click(); true");
+    await sleep(800);
+    results['日报快捷入口一键展开并切 Tab'] =
+      await ev("!document.getElementById('w-panel').hidden && document.getElementById('tab-daily').getAttribute('aria-selected') === 'true'");
     await ev("document.querySelector('#task-groups .task .del').click(); true");
     await sleep(500);
     results['删除后提供撤销入口'] = await ev("!!document.querySelector('.toast-action')");
     await ev("document.querySelector('.toast-action') && document.querySelector('.toast-action').click(); true");
     await sleep(700);
     results['撤销后任务恢复'] = await ev("document.querySelectorAll('#task-groups .task').length >= 1");
-    await ev("window.api.openTab('daily').then(function () { return true; })");
+    await ev("window.api.openTab('weekly').then(function () { return true; })");
     await sleep(700);
-    results['外部跳转日报会自动展开面板'] =
-      await ev("!document.getElementById('w-panel').hidden && document.getElementById('tab-daily').getAttribute('aria-selected') === 'true'");
+    results['外部跳转周报自动展开并切换'] =
+      await ev("!document.getElementById('w-panel').hidden && document.getElementById('tab-weekly').getAttribute('aria-selected') === 'true'");
     results['无 console.error'] = consoleErrors.length === 0;
     if (consoleErrors.length) console.log('控制台错误:', consoleErrors.join(' | '));
   } finally {
