@@ -18,7 +18,6 @@ const DEFAULT_SETTINGS = {
   widget: {
     opacity: 0.55,
     blur: 14,
-    clickThrough: false,
     expanded: false,
     rect: null,
     scale: 1

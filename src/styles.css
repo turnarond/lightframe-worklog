@@ -1164,8 +1164,13 @@ body:not(.expanded) .w-compose .quickadd:focus-within .qa-controls { display: gr
   border-top: 1px dashed var(--line-soft);
 }
 
-/* 展开态：挂件主区让位给面板，月历下沉到面板底部 */
-body.expanded .w-body { display: none; }
+/* 展开态：今日任务列表始终可见（不隐藏），改为紧凑区块，避免挤压下方三 Tab 面板 */
+body.expanded .w-body {
+  flex: none;
+  padding: 6px 12px 8px;
+  border-bottom: 1px dashed var(--line-soft);
+}
+body.expanded .w-tlist { max-height: 116px; }
 .panel-cal-slot { margin-top: 6px; }
 .panel-cal-slot .w-cal {
   background: var(--paper-3);
@@ -1256,33 +1261,22 @@ body.expanded .w-body { display: none; }
 .w-task .dot.high { background: var(--p-high); }
 .w-task .dot.mid { background: var(--p-mid); }
 .w-task .dot.low { background: var(--p-low); }
-
-/* 鼠标穿透（ct-mode）：闲置时挂件主区如同桌面壁纸；展开面板始终可交互 */
-body.ct-mode .w-body { pointer-events: none; }
-body.ct-mode .w-handle,
-body.ct-mode #w-panel { pointer-events: auto; }
-
-/* 弹窗始终可交互，不受穿透影响 */
-.modal { pointer-events: auto; }
-
-/* 壁纸态（穿透）视觉区分：玻璃质感 + 强调色描边/光晕 + 顶部暖光，与正常态明显不同 */
-body.ct-mode {
-  box-shadow: 0 0 0 1.5px var(--accent-soft), 0 22px 60px rgba(70, 50, 30, .30), inset 0 0 0 1px rgba(255, 255, 255, .45);
+/* 收起态任务的显式编辑入口（不再只能双击） */
+.w-edit {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 11px;
+  line-height: 1.3;
+  cursor: pointer;
 }
-body.ct-mode::before { opacity: .12; }
-body.ct-mode::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: radial-gradient(120% 80% at 50% -10%, rgba(194, 97, 63, .14), transparent 60%);
-  border-radius: 16px;
-}
-body.ct-mode .w-handle {
-  background: linear-gradient(180deg, rgba(194, 97, 63, .18), rgba(194, 97, 63, .06));
-  border-bottom-color: var(--accent-soft);
-}
+.w-task:hover .w-edit { color: var(--accent); border-color: var(--accent-soft); }
+.w-edit:focus-visible { color: var(--accent); border-color: var(--accent); }
+
 .toast.error { background: var(--p-high); }
 .toast.ok { background: #4f6b45; }
 

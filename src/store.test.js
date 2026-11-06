@@ -27,7 +27,6 @@ test('DEFAULT_SETTINGS: 与 SPEC §3 一致', () => {
   assert.deepEqual(S.DEFAULT_SETTINGS.widget, {
     opacity: 0.55,
     blur: 14,
-    clickThrough: false,
     expanded: false,
     rect: null,
     scale: 1

@@ -3,18 +3,26 @@
 // 不改动用户磁盘文件；通过应用自身 IPC 临时写入一条任务，结束后恢复。
 'use strict';
 
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { spawn, execSync } = require('node:child_process');
 
 const PORT = Number(process.env.SMOKE_PORT || 9347);
 const ROOT = path.join(__dirname, '..');
 const EXE = path.join(ROOT, 'dist', 'win-unpacked', '光影工作志.exe');
+// 独立 userData：既绕开与用户已安装实例的单实例锁，也不触碰真实任务/设置数据
+const SMOKE_USER_DATA = path.join(os.tmpdir(), 'lw-smoke-ui-' + process.pid);
+const nowDate = new Date();
+const localToday = nowDate.getFullYear() + '-' +
+  String(nowDate.getMonth() + 1).padStart(2, '0') + '-' +
+  String(nowDate.getDate()).padStart(2, '0');
 const TASK = {
   id: 'smoke-ui-task',
   title: 'UI 冒烟任务',
   category: '工作',
   priority: 'mid',
-  dueDate: null,
+  dueDate: localToday,
   details: '',
   done: false,
   createdAt: new Date().toISOString(),
@@ -74,9 +82,11 @@ async function connect() {
 }
 
 async function main() {
-  const child = spawn(EXE, ['--remote-debugging-port=' + PORT], {
-    stdio: 'ignore', windowsHide: true
-  });
+  fs.mkdirSync(SMOKE_USER_DATA, { recursive: true });
+  const child = spawn(EXE, [
+    '--user-data-dir=' + SMOKE_USER_DATA,
+    '--remote-debugging-port=' + PORT
+  ], { stdio: 'ignore', windowsHide: true });
   let session = null;
   let origTasks = '[]';
   let origSettings = '{}';
@@ -142,10 +152,27 @@ async function main() {
     await ev("document.getElementById('qa-title').focus(); true");
     results['聚焦速记框后控件展开'] =
       await ev("getComputedStyle(document.querySelector('.qa-controls')).display !== 'none'");
+    results['收起态任务有显式编辑按钮'] =
+      await ev("document.querySelectorAll('#w-tlist .w-task .w-edit').length >= 1");
+    results['日历格有双击新建提示'] =
+      await ev("(function(){var c=document.querySelector('.w-cell');return !!c && c.title.indexOf('双击')>=0;})()");
+    results['壁纸穿透入口已移除'] =
+      await ev("!document.getElementById('w-ct') && !document.body.classList.contains('ct-mode')");
+    // 单一日期状态：收起态选另一天 → 筛选条同步出现；回到今天 → 同步清除
+    await ev("(function(){var c=Array.from(document.querySelectorAll('#w-cal-grid .w-cell')).find(function(x){return !x.classList.contains('today');});if(c)c.click();return !!c;})()");
+    await sleep(350);
+    results['单一日期状态：选日后筛选条同步出现'] =
+      await ev("!document.getElementById('filter-bar').hidden");
+    await ev("document.getElementById('w-today').click(); true");
+    await sleep(350);
+    results['单一日期状态：回到今天同步清筛选'] =
+      await ev("document.getElementById('filter-bar').hidden");
     await ev("document.getElementById('w-daily') && document.getElementById('w-daily').click(); true");
     await sleep(800);
     results['日报快捷入口一键展开并切 Tab'] =
       await ev("!document.getElementById('w-panel').hidden && document.getElementById('tab-daily').getAttribute('aria-selected') === 'true'");
+    results['展开态今日任务列表仍可见'] =
+      await ev("(function(){var t=document.getElementById('w-today');var b=document.getElementById('w-body');return !!t && getComputedStyle(b).display!=='none' && t.getBoundingClientRect().height>0;})()");
     await ev("document.querySelector('#task-groups .task .del').click(); true");
     await sleep(500);
     results['删除后提供撤销入口'] = await ev("!!document.querySelector('.toast-action')");
@@ -167,6 +194,9 @@ async function main() {
       try { session.ws.close(); } catch (e) { /* 忽略 */ }
     }
     try { execSync('taskkill /pid ' + child.pid + ' /t /f', { stdio: 'ignore' }); } catch (e) { /* 已退出 */ }
+    setTimeout(function () {
+      try { fs.rmSync(SMOKE_USER_DATA, { recursive: true, force: true }); } catch (e) { /* 忽略 */ }
+    }, 600);
   }
 
   Object.keys(results).forEach((k) => console.log((results[k] ? 'PASS ' : 'FAIL ') + k));

@@ -232,28 +232,11 @@ function showQuickAdd() {
 }
 
 // ---------- 托盘 ----------
-// 逃生口：穿透态失灵时，从系统托盘无条件恢复可交互（OS 级复位 + 通知渲染端 + 清理状态）
-function forceInteractive() {
-  settings.widget = settings.widget || {};
-  settings.widget.clickThrough = false;
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    try { mainWindow.setIgnoreMouseEvents(false); } catch (err) { /* 忽略 */ }
-    mainWindow.show();
-    mainWindow.focus();
-  }
-  sendToMain('widget:forceInteractive');
-  persistSettings();
-}
-
 function buildTrayMenu() {
   return Menu.buildFromTemplate([
     {
       label: '显示主窗口',
       click: function () { showMainWindow(); }
-    },
-    {
-      label: '恢复可交互（退出穿透）',
-      click: function () { forceInteractive(); }
     },
     {
       label: '今天日报',
@@ -460,8 +443,9 @@ function registerIpc() {
 
   ipcMain.handle('settings:save', async function (_event, next) {
     const merged = Object.assign({}, settings, next || {});
-    // 穿透态只作为会话内临时状态，不落盘，避免下次启动读到 true
-    merged.widget = Object.assign({}, merged.widget || {}, { clickThrough: false });
+    // 壁纸穿透态已移除：清理历史 settings.json 里可能残留的废弃字段
+    merged.widget = Object.assign({}, merged.widget || {});
+    delete merged.widget.clickThrough;
     settings = merged;
     await persistSettings();
     applyAllSettings();
@@ -547,13 +531,6 @@ function registerIpc() {
 
   // 挂件折叠 / 展开：高度改由渲染端按内容自适应（widget:setHeight），此处仅作兼容空操作
   ipcMain.handle('widget:setExpanded', function () {
-    return true;
-  });
-
-  // 2.5.1：OS 级鼠标穿透（forward 让页面仍能收到鼠标事件，用于命中手柄/按钮时临时恢复）
-  ipcMain.handle('widget:setClickThrough', function (_event, flag) {
-    if (!mainWindow || mainWindow.isDestroyed()) return false;
-    try { mainWindow.setIgnoreMouseEvents(!!flag, { forward: true }); } catch (err) { /* 忽略 */ }
     return true;
   });
 
@@ -659,8 +636,7 @@ async function bootstrap() {
     console.warn('[settings] 读取失败，使用默认值：', err && err.message);
     settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   }
-  // 每次启动强制回到「普通可交互」形态：穿透（壁纸）态不跨启动保留。
-  // 否则残留的 clickThrough:true 会让整窗在启动时吞掉所有点击且无出口。
+  // 清理历史 settings.json 中已废弃的壁纸穿透字段；窗口始终以普通可交互形态启动。
   settings = normalizeStartupSettings(settings);
 
   // v3.0：若已登录过，恢复鉴权，使重启后的本地改动能继续自动同步

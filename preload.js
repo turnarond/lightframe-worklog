@@ -39,7 +39,6 @@ contextBridge.exposeInMainWorld('api', {
   setLaunchAtLogin: function (value) { return ipcRenderer.invoke('app:set-launch-at-login', value); },
   setHotkey: function (value) { return ipcRenderer.invoke('app:set-hotkey', value); },
   setWidgetExpanded: function (expanded) { return ipcRenderer.invoke('widget:setExpanded', expanded); },
-  setClickThrough: function (flag) { return ipcRenderer.invoke('widget:setClickThrough', flag); },
   setHeight: function (h) { return ipcRenderer.invoke('widget:setHeight', h); },
   resetWidgetPosition: function () { return ipcRenderer.invoke('widget:resetPosition'); },
   notifyRefresh: function () { return ipcRenderer.invoke('app:refresh'); },
@@ -70,11 +69,5 @@ contextBridge.exposeInMainWorld('api', {
     const handler = function (_event, tab) { cb(tab); };
     ipcRenderer.on('open-tab', handler);
     return function () { ipcRenderer.removeListener('open-tab', handler); };
-  },
-  onForceInteractive: function (cb) {
-    if (typeof cb !== 'function') return function () {};
-    const handler = function () { cb(); };
-    ipcRenderer.on('widget:forceInteractive', handler);
-    return function () { ipcRenderer.removeListener('widget:forceInteractive', handler); };
   }
 });

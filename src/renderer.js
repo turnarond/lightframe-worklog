@@ -42,7 +42,6 @@
       opacity: 0.9,
       blur: 14,
       scale: 1,
-      clickThrough: false,
       expanded: false,
       rect: null
     }
@@ -70,13 +69,12 @@
     logs: {},
     today: TM.todayString(),
     tab: 'task',
-    filterDate: null,
     calYear: 0,
     calMonth: 0,
     dailyDate: '',
     weekStart: '',
     addPriority: 'mid',
-    viewDay: '',          // 挂件列表当前展示的日期（收起态点日期即切换）
+    viewDay: '',          // 唯一的「当前查看日」：驱动挂件列表、日历选中态与任务 Tab 筛选
     weekAnchor: ''        // 收起态周视图的锚点（周一所在那周）
   };
 
@@ -230,7 +228,6 @@
       opacity: typeof sw.opacity === 'number' ? sw.opacity : dw.opacity,
       blur: typeof sw.blur === 'number' ? sw.blur : dw.blur,
       scale: typeof sw.scale === 'number' ? sw.scale : dw.scale,
-      clickThrough: typeof sw.clickThrough === 'boolean' ? sw.clickThrough : dw.clickThrough,
       expanded: typeof sw.expanded === 'boolean' ? sw.expanded : dw.expanded,
       rect: (sw.rect && typeof sw.rect.x === 'number' && typeof sw.rect.y === 'number') ? sw.rect : null
     };
@@ -413,16 +410,20 @@
 
   function renderFilterBar() {
     var bar = D['filter-bar'];
-    if (!state.filterDate) {
+    // viewDay === today 表示「不额外筛选」；选了别的日子才显示筛选条
+    if (!state.viewDay || state.viewDay === state.today) {
       bar.hidden = true;
       return;
     }
     bar.hidden = false;
-    D['filter-text'].textContent = '筛选：' + TM.formatDateCN(state.filterDate);
+    D['filter-text'].textContent = '筛选：' + TM.formatDateCN(state.viewDay);
   }
 
-  function setFilter(dateStr) {
-    state.filterDate = dateStr || null;
+  // 单一日期状态：viewDay 同时驱动挂件今日列表、日历选中态与任务 Tab 筛选。
+  // 回到今天即清除筛选，不再有第二份日期状态。
+  function setViewDay(dateStr) {
+    state.viewDay = dateStr || state.today;
+    syncQuickDate();
     renderTasks();
     renderWidget();
   }
@@ -508,8 +509,8 @@
     renderFilterBar();
 
     var list = state.tasks.filter(function (task) { return !task.deletedAt; });
-    if (state.filterDate) {
-      list = list.filter(function (task) { return task.dueDate === state.filterDate; });
+    if (state.viewDay && state.viewDay !== state.today) {
+      list = list.filter(function (task) { return task.dueDate === state.viewDay; });
     }
 
     var groups = TM.groupTasks(list, state.today);
@@ -537,7 +538,7 @@
     if (!shown) {
       wrap.appendChild(el('p', {
         class: 'empty',
-        text: state.filterDate ? '这一天没有任务' : '还没有任务，随手记一笔吧'
+        text: (state.viewDay && state.viewDay !== state.today) ? '这一天没有任务' : '还没有任务，随手记一笔吧'
       }));
     }
   }
@@ -876,8 +877,9 @@
         class: 'w-cell' + (opts.muted ? ' muted' : '') + (opts.today ? ' today' : '') + (opts.sel ? ' sel' : '')
       });
       cell.textContent = opts.day;
+      cell.title = '单击查看这一天 · 双击新建任务';
       cell.setAttribute('aria-label',
-        Number(p[1]) + '月' + Number(p[2]) + '日' + (count ? '，' + count + ' 项待办' : ''));
+        Number(p[1]) + '月' + Number(p[2]) + '日' + (count ? '，' + count + ' 项待办' : '') + '，双击新建任务');
       if (count) cell.appendChild(el('span', { class: 'w-dot' }));
       cell.addEventListener('click', function () { onWidgetDayClick(dateStr); });
       cell.addEventListener('dblclick', function (event) { event.stopPropagation(); openNewTask(dateStr); });
@@ -887,7 +889,7 @@
     if (expanded) {
       monthCellsMonFirst(state.calYear, state.calMonth).forEach(function (c) {
         grid.appendChild(buildCell(c.dateStr, {
-          muted: !c.inMonth, today: c.isToday, sel: c.dateStr === state.filterDate, day: c.day
+          muted: !c.inMonth, today: c.isToday, sel: c.dateStr === state.viewDay, day: c.day
         }));
       });
     } else {
@@ -901,20 +903,12 @@
   }
 
   function onWidgetDayClick(dateStr) {
-    if (state.settings.widget.expanded) {
-      // 展开态：点击相邻月灰格时自动跳到该月，再按日期筛选「任务」Tab
-      var p = dateStr.split('-');
-      state.calYear = Number(p[0]);
-      state.calMonth = Number(p[1]);
-      state.viewDay = dateStr;
-      setFilter(dateStr === state.filterDate ? null : dateStr);
-      if (state.tab !== 'task') switchTab('task');
-    } else {
-      // 收起态：就地切换下方列表到该天，不弹面板
-      state.viewDay = dateStr;
-      syncQuickDate();
-      renderWidget();
-    }
+    var p = dateStr.split('-');
+    state.calYear = Number(p[0]);
+    state.calMonth = Number(p[1]);
+    setViewDay(dateStr);
+    // 展开态点日历格时回到任务 Tab，让该日筛选结果可见
+    if (state.settings.widget.expanded && state.tab !== 'task') switchTab('task');
   }
 
   function renderWidgetToday() {
@@ -938,6 +932,14 @@
       row.appendChild(el('span', { class: 'dot ' + task.priority }));
       row.appendChild(el('span', { class: 'wt', text: task.title }));
       if (task.details && task.details.trim()) row.appendChild(el('span', { class: 'w-note', text: '📝' }));
+      var edit = el('button', { type: 'button', class: 'w-edit', text: '✎' });
+      edit.setAttribute('aria-label', '编辑任务：' + task.title);
+      edit.title = '编辑任务详情';
+      edit.addEventListener('click', function (event) {
+        event.stopPropagation();
+        openEditor(task.id);
+      });
+      row.appendChild(edit);
       row.addEventListener('dblclick', function () { openEditor(task.id); });
       box.appendChild(row);
     });
@@ -956,13 +958,7 @@
     root.style.setProperty('--w-opacity', String(w.opacity));
     root.style.setProperty('--w-blur', w.blur + 'px');
     root.style.setProperty('--w-scale', String(w.scale || 1));
-    document.body.classList.toggle('ct-mode', !!w.clickThrough);
     document.body.classList.toggle('expanded', !!w.expanded);
-    if (D['w-ct']) {
-      D['w-ct'].setAttribute('aria-pressed', String(!!w.clickThrough));
-      D['w-ct'].textContent = w.clickThrough ? '👁' : '✋';
-      D['w-ct'].title = w.clickThrough ? '鼠标穿透中（闲置壁纸态，仅手柄可拖）' : '当前可点击交互';
-    }
     if (D['w-expand']) D['w-expand'].setAttribute('aria-pressed', String(!!w.expanded));
   }
 
@@ -977,70 +973,17 @@
     }
     D['w-panel'].hidden = !next;
     applyWidgetStyle();
-    applyClickThrough(state.settings.widget.clickThrough);
     if (next) { if (D['qa-date']) D['qa-date'].value = ''; }
     else syncQuickDate();
     renderWidget();
-    // P1-#3：展开时把收起态选中的日期带入「任务」Tab 筛选，保持上下文连贯
-    if (next && state.viewDay && state.viewDay !== state.today) {
-      setFilter(state.viewDay);
-      if (state.tab !== 'task') switchTab('task');
-    }
     if (typeof bridge.setWidgetExpanded === 'function') {
       try { await bridge.setWidgetExpanded(next); } catch (e) { /* 忽略 */ }
     }
     await apiCall('saveSettings', null, state.settings);
   }
 
-  async function toggleClickThrough() {
-    var next = !state.settings.widget.clickThrough;
-    state.settings.widget.clickThrough = next;
-    applyWidgetStyle();
-    applyClickThrough(next);
-    await apiCall('saveSettings', null, state.settings);
-  }
-
-  // 2.5.1：OS 级鼠标穿透 + 命中可交互区（手柄/面板/弹窗）时临时恢复可交互
-  // 用 mouseover/mouseout 委托，确保「穿透态下也能拖动坐标手柄」可靠生效
   var teDateTrigger = null;
   var qaDateTrigger = null;
-  var ctInteractive = false;
-  function setOsInteractive(interactive) {
-    if (typeof bridge.setClickThrough !== 'function') return;
-    if (ctInteractive === interactive) return;
-    ctInteractive = interactive;
-    bridge.setClickThrough(!interactive); // interactive=true => 关闭穿透（窗口可点）
-  }
-  var ctMove = null;
-  function applyClickThrough(flag) {
-    if (typeof bridge.setClickThrough !== 'function') return;
-    if (ctMove) { document.removeEventListener('mousemove', ctMove, true); ctMove = null; }
-    if (flag) {
-      setOsInteractive(false); // 进入穿透态：OS 忽略窗口（仅手柄/面板/弹窗区临时恢复）
-      var zone = '.w-handle, #w-panel, .modal';
-      // OS 穿透 + forward 时 e.target 常落在 html/document 上，单靠 mouseover 命中会漏；
-      // 改用 mousemove 持续检测 + 几何兜底，保证鼠标移到手柄上一定能点回来。
-      ctMove = function (e) {
-        var inZone = false;
-        if (e.target && e.target.closest && e.target.closest(zone)) {
-          inZone = true;
-        } else if (typeof e.clientX === 'number') {
-          var nodes = document.querySelectorAll(zone);
-          for (var i = 0; i < nodes.length; i++) {
-            var n = nodes[i];
-            if (n.hidden || n.offsetParent === null) continue;
-            var r = n.getBoundingClientRect();
-            if (e.clientX >= r.left && e.clientX <= r.right &&
-                e.clientY >= r.top && e.clientY <= r.bottom) { inZone = true; break; }
-          }
-        }
-        setOsInteractive(inZone);
-      };
-      document.addEventListener('mousemove', ctMove, true);
-    } else {
-      setOsInteractive(true); // 关闭穿透：窗口完全可交互
-    }
-  }
 
   // 2.5.1：按内容高度自适应窗口（临时放开 body 高度量出真实内容高度）
   function fitWidgetHeight() {
@@ -1577,7 +1520,6 @@
     });
 
     // 桌面挂件：手柄控件
-    D['w-ct'].addEventListener('click', toggleClickThrough);
     D['w-expand'].addEventListener('click', toggleExpand);
     D['w-daily'].addEventListener('click', function () { openView('daily'); });
     D['w-weekly'].addEventListener('click', function () { openView('weekly'); });
@@ -1613,14 +1555,11 @@
       state.calYear = Number(parts[0]);
       state.calMonth = Number(parts[1]);
       state.weekAnchor = today;
-      state.viewDay = today;
-      if (state.filterDate) setFilter(null);   // 回到今天不应残留旧的日期筛选
-      syncQuickDate();
-      renderWidget();
+      setViewDay(today);   // 单一状态：回到今天即清除筛选
     });
 
     // 筛选
-    D['filter-clear'].addEventListener('click', function () { setFilter(null); });
+    D['filter-clear'].addEventListener('click', function () { setViewDay(state.today); });
 
     // 月历（任务 Tab 内的旧月历已移除，单一月历即挂件主区月历）
 
@@ -1761,7 +1700,7 @@
       'cat-chips', 'cat-input', 'cat-add',
       'task-editor', 'te-title', 'te-category', 'te-priority', 'te-date', 'te-details',
       'te-save', 'te-cancel', 'te-delete', 'te-close', 'te-backdrop',
-      'w-handle', 'w-clock', 'w-ct', 'w-expand', 'w-daily', 'w-weekly', 'w-hide', 'w-quit', 'w-settings',
+      'w-handle', 'w-clock', 'w-expand', 'w-daily', 'w-weekly', 'w-hide', 'w-quit', 'w-settings',
       'w-body', 'w-cal', 'panel-cal-slot', 'w-calTitle', 'w-prev', 'w-next', 'w-today', 'w-cal-grid', 'w-todayLabel',
       'w-todayCount', 'w-tlist', 'w-panel',
       'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'set-opacity', 'set-opacity-val', 'set-scale', 'set-scale-val', 'btn-quit', 'toast',
@@ -1820,15 +1759,6 @@
   }
 
   function subscribeBridge() {
-    // 托盘「恢复可交互」逃生口：无条件退出穿透态
-    if (typeof bridge.onForceInteractive === 'function') {
-      bridge.onForceInteractive(function () {
-        state.settings.widget.clickThrough = false;
-        applyWidgetStyle();
-        applyClickThrough(false);
-        apiCall('saveSettings', null, state.settings);
-      });
-    }
     if (typeof bridge.onRefresh === 'function') {
       bridge.onRefresh(async function () {
         try {
@@ -1902,9 +1832,8 @@
     updateSyncIndicator();
     applyTabUI();
 
-    // 桌面挂件：应用形态（透明/穿透/折叠）+ 初次渲染迷你月历与今日任务
+    // 桌面挂件：应用形态（透明/折叠）+ 初次渲染迷你月历与今日任务
     applyWidgetStyle();
-    applyClickThrough(state.settings.widget.clickThrough);
     D['w-panel'].hidden = !state.settings.widget.expanded;
     // 若以展开态启动，月历应已在面板底部，避免被隐藏的挂件主区带走
     if (state.settings.widget.expanded && D['w-cal'] && D['panel-cal-slot']) {
@@ -1912,11 +1841,6 @@
     }
     syncQuickDate();
     renderWidget();
-
-    // P0-#1：若当前处于「穿透（壁纸）态」，给一次提示，避免「点不动以为坏了」
-    if (state.settings.widget.clickThrough) {
-      showToast('当前为穿透（壁纸）态：点手柄 👁 切回可交互', 'ok');
-    }
 
     // 让入场动画在首屏渲染后启动
     requestAnimationFrame(function () {
