@@ -1099,7 +1099,7 @@ textarea:focus-visible,
   border-top: 1px solid var(--line-soft);
 }
 
-/* 手柄：拖拽区（仅它始终可交互，用于移动窗口） */
+/* 手柄：窗口拖拽区。除按钮外整条都可拖，与 grab 光标保持一致 */
 .w-handle {
   display: flex;
   align-items: center;
@@ -1112,20 +1112,20 @@ textarea:focus-visible,
   pointer-events: auto;
 }
 .w-handle:active { cursor: grabbing; }
-.w-handle .w-grip { color: var(--ink-faint); font-size: 0.8571rem; -webkit-app-region: no-drag; }
+.w-handle .w-grip { color: var(--ink-faint); font-size: 0.8571rem; -webkit-app-region: drag; }
 .w-handle .w-brand {
   font-family: var(--display);
   font-size: 0.9286rem;
   font-weight: 600;
   color: var(--ink);
-  -webkit-app-region: no-drag;
+  -webkit-app-region: drag;
 }
 .w-handle .w-clock {
   margin-left: auto;
   font-family: var(--mono);
   font-size: 0.8571rem;
   color: var(--accent-deep);
-  -webkit-app-region: no-drag;
+  -webkit-app-region: drag;
 }
 .w-handle .w-btn {
   -webkit-app-region: no-drag;
@@ -1142,16 +1142,6 @@ textarea:focus-visible,
 }
 .w-handle .w-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 .w-handle .w-btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
-/* 日报 / 周报 快捷入口：单字更省宽度，衬线墨色与图标按钮区分 */
-.w-handle .w-jump {
-  width: 20px;
-  height: 20px;
-  font-family: var(--display);
-  font-weight: 600;
-  color: var(--accent-deep);
-  background: rgba(255, 255, 255, .55);
-}
-
 /* 任务优先：速记条全局置顶（收起/展开都在） */
 .w-compose { padding: 10px 12px 0; }
 .w-compose .quickadd { margin: 0; gap: 7px; padding: 10px 11px 11px; }

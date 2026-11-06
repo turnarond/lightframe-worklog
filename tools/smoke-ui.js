@@ -143,10 +143,13 @@ async function main() {
     if (Array.isArray(injected) && injected.length) console.log('页面异常:', injected.join(' | '));
     results['设置字段保留：字号缩放重启后不回退'] =
       await ev("document.getElementById('set-scale').value === '1.25'");
-    results['手柄有日报/周报快捷入口'] =
-      await ev("!!document.getElementById('w-daily') && !!document.getElementById('w-weekly')");
-    results['手柄新增入口后无横向溢出'] =
+    results['手柄已移除日/周快捷按钮'] =
+      await ev("!document.getElementById('w-daily') && !document.getElementById('w-weekly')");
+    results['手柄无横向溢出'] =
       await ev("(function(){var h=document.getElementById('w-handle');return h.scrollWidth <= h.clientWidth + 1;})()");
+    console.log('拖拽诊断:', await ev("(function(){var h=document.getElementById('w-handle');var r=h.getBoundingClientRect();var y=r.top+r.height/2;var g={};for(var x=r.left+1;x<r.right;x+=2){var el=document.elementFromPoint(x,y);var cs=el?getComputedStyle(el):null;var k=(el?(el.id||el.className||el.tagName):'null')+' | '+(cs?cs.getPropertyValue('-webkit-app-region'):'?')+' | '+(cs?cs.cursor:'?');g[k]=(g[k]||0)+1;}return JSON.stringify(g);})()"));
+    results['手柄显示手形的区域均可拖动'] = await ev("(function(){var h=document.getElementById('w-handle');var r=h.getBoundingClientRect();var y=r.top+r.height/2;var bad=0,total=0;for(var x=r.left+2;x<r.right-2;x+=2){var el=document.elementFromPoint(x,y);if(!el)continue;var cs=getComputedStyle(el);if(cs.cursor==='grab'||cs.cursor==='grabbing'){total++;if(cs.getPropertyValue('-webkit-app-region')!=='drag')bad++;}}return total>0&&bad===0;})()");
+    results['手柄可拖区域占比不低于 40%'] = await ev("(function(){var h=document.getElementById('w-handle');var r=h.getBoundingClientRect();var y=r.top+r.height/2;var drag=0,total=0;for(var x=r.left+2;x<r.right-2;x+=2){var el=document.elementFromPoint(x,y);if(!el)continue;total++;if(getComputedStyle(el).getPropertyValue('-webkit-app-region')==='drag')drag++;}return total>0&&drag/total>=0.4;})()");
     results['收起态速记条默认单行'] =
       await ev("getComputedStyle(document.querySelector('.qa-controls')).display === 'none'");
     await ev("document.getElementById('qa-title').focus(); true");
@@ -167,9 +170,9 @@ async function main() {
     await sleep(350);
     results['单一日期状态：回到今天同步清筛选'] =
       await ev("document.getElementById('filter-bar').hidden");
-    await ev("document.getElementById('w-daily') && document.getElementById('w-daily').click(); true");
+    await ev("window.api.openTab('daily').then(function () { return true; })");
     await sleep(800);
-    results['日报快捷入口一键展开并切 Tab'] =
+    results['托盘日报跳转自动展开并切 Tab'] =
       await ev("!document.getElementById('w-panel').hidden && document.getElementById('tab-daily').getAttribute('aria-selected') === 'true'");
     results['展开态今日任务列表仍可见'] =
       await ev("(function(){var t=document.getElementById('w-today');var b=document.getElementById('w-body');return !!t && getComputedStyle(b).display!=='none' && t.getBoundingClientRect().height>0;})()");

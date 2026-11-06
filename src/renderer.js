@@ -1524,8 +1524,6 @@
 
     // 桌面挂件：手柄控件
     D['w-expand'].addEventListener('click', toggleExpand);
-    D['w-daily'].addEventListener('click', function () { openView('daily'); });
-    D['w-weekly'].addEventListener('click', function () { openView('weekly'); });
     D['w-hide'].addEventListener('click', function () {
       if (typeof bridge.hideWindow === 'function') { try { bridge.hideWindow(); } catch (e) { /* 忽略 */ } }
       // P2-#12：明确告知「还在跑，只是收进托盘」
@@ -1703,7 +1701,7 @@
       'cat-chips', 'cat-input', 'cat-add',
       'task-editor', 'te-title', 'te-category', 'te-priority', 'te-date', 'te-details',
       'te-save', 'te-cancel', 'te-delete', 'te-close', 'te-backdrop',
-      'w-handle', 'w-clock', 'w-expand', 'w-daily', 'w-weekly', 'w-hide', 'w-quit', 'w-settings',
+      'w-handle', 'w-clock', 'w-expand', 'w-hide', 'w-quit', 'w-settings',
       'w-body', 'w-cal', 'panel-cal-slot', 'w-calTitle', 'w-prev', 'w-next', 'w-today', 'w-cal-grid', 'w-todayLabel',
       'w-todayCount', 'w-tlist', 'w-panel',
       'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'set-opacity', 'set-opacity-val', 'set-scale', 'set-scale-val', 'btn-quit', 'toast',
