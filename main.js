@@ -13,14 +13,15 @@ const {
   globalShortcut,
   clipboard,
   nativeImage,
-  screen
+  screen,
+  net
 } = require('electron');
 
 const { createTaskStore, createLogStore, createSettingsStore, createSyncMetaStore, DEFAULT_SETTINGS } =
   require('./src/store.js');
 const { createSyncBridge } = require('./src/syncBridge.js');
 const { normalizeStartupSettings } = require('./src/startupSettings.js');
-const AuthClient = require('./src/authClient.js');
+const SyncCode = require('./src/syncCode.js');
 
 // v2.6 自动更新：electron-updater 为可选依赖，未安装时优雅降级（检查更新走占位提示）
 let autoUpdater = null;
@@ -69,6 +70,7 @@ let mainWindow = null;
 let quickAddWindow = null;
 let tray = null;
 let reminderTimer = null;
+let syncTimer = null;
 let stores = null;
 let syncBridge = null;
 
@@ -453,58 +455,40 @@ function registerIpc() {
     return settings;
   });
 
-  // ---------- 账号 / 同步（v3.0） ----------
-  function serverUrlFrom(payload) {
-    return (payload && payload.serverUrl) || settings.serverUrl || '';
-  }
-  async function loginFlow(kind, payload) {
-    const serverUrl = serverUrlFrom(payload);
-    if (!serverUrl) return { ok: false, error: '请先在设置中填写服务器地址' };
+  // ---------- 多设备同步（同步码） ----------
+  async function runSync() {
+    if (!syncBridge || !settings.syncCode || !settings.serverUrl) return;
     try {
-      const result = kind === 'register'
-        ? await AuthClient.register(serverUrl, payload.email, payload.password)
-        : await AuthClient.login(serverUrl, payload.email, payload.password);
-      settings.account = { email: result.email, token: result.token };
-      settings.serverUrl = serverUrl;
-      await persistSettings();
-      if (syncBridge) {
-        syncBridge.setAuth(serverUrl, result.token);
-        try { await syncBridge.seedIfFirstSync(); } catch (e) { console.warn('[auth] 首次同步失败：', e && e.message); }
-      }
-      return { ok: true, email: result.email };
+      if (typeof net.isOnline === 'function' && !net.isOnline()) return;
+      await syncBridge.syncNow();
+      sendToMain('sync:status', { ok: true });
     } catch (err) {
-      return { ok: false, error: (err && err.message) || '操作失败' };
+      sendToMain('sync:status', { ok: false, error: (err && err.message) || '同步失败' });
     }
   }
 
-  ipcMain.handle('auth:login', function (_event, payload) { return loginFlow('login', payload); });
-  ipcMain.handle('auth:register', function (_event, payload) { return loginFlow('register', payload); });
-
-  ipcMain.handle('auth:forgot', async function (_event, payload) {
-    const serverUrl = serverUrlFrom(payload);
-    if (!serverUrl) return { ok: false, error: '请先填写服务器地址' };
-    try {
-      await AuthClient.forgot(serverUrl, payload && payload.email);
-      return { ok: true };
-    } catch (err) {
-      return { ok: false, error: (err && err.message) || '请求失败' };
-    }
-  });
-
-  ipcMain.handle('auth:logout', async function () {
-    settings.account = null;
+  ipcMain.handle('sync:apply', async function (_event, payload) {
+    const code = SyncCode.normalizeSyncCode(payload && payload.code);
+    const serverUrl = String((payload && payload.serverUrl) || '').trim().replace(/\/$/, '');
+    if (!SyncCode.isValidSyncCode(code)) return { ok: false, error: '同步码格式不正确' };
+    if (!serverUrl) return { ok: false, error: '请填写服务器地址' };
+    settings.syncCode = code;
+    settings.serverUrl = serverUrl;
     await persistSettings();
-    if (syncBridge) syncBridge.setAuth('', null);
+    if (syncBridge) {
+      syncBridge.setAuth(serverUrl, code);
+      try { await syncBridge.seedIfFirstSync(); } catch (e) { console.warn('[sync] 首次同步：', e && e.message); }
+      await runSync();
+    }
     return { ok: true };
   });
 
-  ipcMain.handle('auth:status', function () {
-    const loggedIn = !!(settings.account && settings.account.token);
-    return {
-      loggedIn: loggedIn,
-      email: loggedIn ? settings.account.email : null,
-      serverUrl: settings.serverUrl || ''
-    };
+  ipcMain.handle('sync:clear', async function () {
+    settings.syncCode = '';
+    await persistSettings();
+    if (syncBridge) syncBridge.setAuth('', null);
+    sendToMain('sync:status', { ok: true });
+    return { ok: true };
   });
 
   ipcMain.handle('app:copy', function (_event, text) {
@@ -627,7 +611,8 @@ async function bootstrap() {
     tasksStore: stores.tasks,
     logsStore: stores.logs,
     settingsStore: stores.settings,
-    syncMetaStore: createSyncMetaStore(path.join(userData, 'syncmeta.json'))
+    syncMetaStore: createSyncMetaStore(path.join(userData, 'syncmeta.json')),
+    onError: function (msg) { sendToMain('sync:status', { ok: false, error: msg }); }
   });
 
   try {
@@ -639,9 +624,9 @@ async function bootstrap() {
   // 清理历史 settings.json 中已废弃的壁纸穿透字段；窗口始终以普通可交互形态启动。
   settings = normalizeStartupSettings(settings);
 
-  // v3.0：若已登录过，恢复鉴权，使重启后的本地改动能继续自动同步
-  if (settings.account && settings.account.token && settings.serverUrl && syncBridge) {
-    syncBridge.setAuth(settings.serverUrl, settings.account.token);
+  // 同步码：启动即恢复，使重启后本地改动继续自动同步
+  if (settings.syncCode && settings.serverUrl && syncBridge) {
+    syncBridge.setAuth(settings.serverUrl, settings.syncCode);
   }
   try {
     tasksCache = await stores.tasks.load();
@@ -665,6 +650,10 @@ async function bootstrap() {
 
   setTimeout(checkReminders, 5000);
   reminderTimer = setInterval(checkReminders, REMINDER_INTERVAL);
+
+  // 同步码：启动后补一次，随后每 30s 周期同步（本地改动另有 5s 防抖触发）
+  setTimeout(runSync, 2000);
+  syncTimer = setInterval(runSync, 30000);
 }
 
 if (gotLock) {

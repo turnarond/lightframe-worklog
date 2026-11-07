@@ -43,6 +43,16 @@ test('设计预览稿不再含穿透开关', function () {
   if (read(p).indexOf('clickthrough') >= 0) throw new Error('设计稿仍有穿透开关');
 });
 
+test('账号体系已移除、同步码区就位', function () {
+  const html = read('index.html');
+  if (html.indexOf('acc-email') >= 0 || html.indexOf('acc-password') >= 0) {
+    throw new Error('账号 UI 仍在');
+  }
+  if (html.indexOf('id="sync-code"') < 0) throw new Error('同步码区缺失');
+  if (fs.existsSync(path.join(ROOT, 'src/authClient.js'))) throw new Error('authClient 应删除');
+  if (!fs.existsSync(path.join(ROOT, 'server-lite/server.js'))) throw new Error('极简服务端缺失');
+});
+
 test('规划文档已同步当前形态', function () {
   const doc = read('docs/plans/2026-11-03-next-steps-design.md');
   if (doc.indexOf('含 widget 透明度/穿透/位置') >= 0) throw new Error('文档仍把穿透写成在售设置');

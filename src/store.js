@@ -10,6 +10,8 @@ const DEFAULT_CATEGORIES = require('./defaultCategories.js');
 const DEFAULT_SETTINGS = {
   categories: DEFAULT_CATEGORIES.slice(),
   lastCategory: DEFAULT_CATEGORIES[0],
+  syncCode: '',
+  serverUrl: '',
   launchAtLogin: true,
   alwaysOnTop: true,
   closeToTray: true,

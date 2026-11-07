@@ -70,23 +70,25 @@
 
 **选型**：Node 原生 `http` + `crypto` + `fs/promises`，零 npm 依赖，单文件 `server-lite/server.js`（目标 ≤ 250 行）。内存约 30MB，不装 Docker、不装数据库。
 
-**存储**：每空间一个 JSON 文件，结构：
+**存储**：每空间一个 JSON 文件。记录不含 `type`；`_storedAt` 是服务端内部游标字段，不会返回给客户端：
 
 ```json
 {
   "version": 1,
   "records": {
-    "tasks":       { "<id>":  { "type": "tasks", "updatedAt": 0 } },
-    "daily_logs":  { "<key>": { "type": "daily_logs", "updatedAt": 0 } },
-    "prefs":       { "<key>": { "type": "prefs", "updatedAt": 0 } }
+    "tasks":       { "<id>":   { "id": "...", "updatedAt": 0, "_storedAt": 0 } },
+    "daily_logs":  { "<date>": { "date": "...", "updatedAt": 0, "_storedAt": 0 } },
+    "prefs":       { "<key>":  { "key": "...", "updatedAt": 0, "_storedAt": 0 } }
   }
 }
 ```
 
-- 记录主键：`tasks` / `prefs` 用 `id` / `key`，`daily_logs` 用日期键；缺失主键的请求拒绝。
+- 记录主键：`tasks` 用 `id`、`daily_logs` 用 `date`、`prefs` 用 `key`；缺失主键的请求拒绝。
 - 写盘：内存态 → 写 `<space>.json.tmp` → `rename` 覆盖；全局 Promise 队列串行化，避免并发覆盖。
-- `pull`：`records[type]` 中 `updatedAt > since` 的行，附 `type` 后返回；`server_time = Date.now()`。
-- `push`：逐条比较 `updatedAt`，仅当新值更大才覆盖（LWW），统计 `applied` / `conflicts`；返回 `server_time`。
+- `push`：逐条比较 `updatedAt`，仅当新值更大才覆盖（LWW），被应用的记录写入 `_storedAt = 本次单调时间戳`；返回 `applied` / `conflicts` / `server_time`。
+- `pull`：按 `_storedAt > since` 增量过滤，返回时剥掉 `_storedAt` 并附 `type`；`server_time` 取同一单调时钟。
+
+**为什么用服务端游标（端到端联调发现并修正）**：初版按 `updatedAt > since` 过滤，但客户端把 `lastPull` 设成服务端 `server_time`——客户端 `updatedAt` 与服务端时间属于两个时钟域，客户端时钟一慢就永远拉不到新记录。`server_time` 与 `_storedAt` 改由同一单调递增的服务端逻辑时钟 `max(now(), last + 1)` 产生，彻底消除时钟偏差依赖；LWW 仍按客户端 `updatedAt` 判定，职责不混淆。
 - 软删墓碑按普通记录保存，不物理删除（与客户端 `deletedAt` 一致）。
 - 启动自检：数据目录可写、损坏 JSON 隔离为 `.bad` 并新建空空间、记录告警日志。
 
@@ -154,11 +156,11 @@
 
 ## 12. 分阶段实施
 
-1. 服务端 `server-lite/` + 单测 + 本地 `curl` 验收
-2. 客户端改造 + 单测 + 烟测
-3. 双实例端到端联调
-4. HTTPS 方案落地 + 部署文档 + 备份脚本
-5. 文档口径修正、bump 版本、打包
+1. ✅ 服务端 `server-lite/` + 单测 + 本地 HTTP 契约验收（13 项）
+2. ✅ 客户端改造 + 单测（144 项）+ 打包烟测（36 项）
+3. ✅ 双实例端到端联调（双向同步 / LWW 冲突 / 离线补传 / 空间隔离）
+4. ⏸ HTTPS 方案落地（待 §14 决策）；部署文档已写 `server-lite/README.md`，备份脚本随部署落地
+5. ✅ 文档口径修正（`README` / `CHANGELOG`）；bump 版本与正式发版待首次部署后执行
 
 ## 13. 成本
 

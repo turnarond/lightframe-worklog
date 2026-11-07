@@ -7,12 +7,13 @@
   var TM = window.TaskModel;
   var RP = window.Report;
   var DC = window.DefaultCategories;
+  var SC = window.SyncCode;
   var Editor = window.Editor || { autoBulletOnEnter: function (v, c) { return { value: v, caret: c }; }, cleanDetails: function (t) { return (t || '').trim(); } };
   var bridge = window.api || {};
 
-  if (!TM || !RP || !DC) {
+  if (!TM || !RP || !DC || !SC) {
     document.addEventListener('DOMContentLoaded', function () {
-      document.body.textContent = '核心模块加载失败，请检查 src/taskModel.js、src/report.js 与 src/defaultCategories.js。';
+      document.body.textContent = '核心模块加载失败，请检查 taskModel / report / defaultCategories / syncCode。';
     });
     return;
   }
@@ -37,7 +38,7 @@
     closeToTray: true,
     hotkey: 'Ctrl+Shift+Space',
     weeklyPlans: {},
-    account: null,
+    syncCode: '',
     serverUrl: '',
     widget: {
       opacity: 0.9,
@@ -65,7 +66,8 @@
 
   var state = {
     settings: null,
-    account: null,
+    syncError: '',
+    lastSyncAt: '',
     tasks: [],
     logs: {},
     today: TM.todayString(),
@@ -245,8 +247,7 @@
       lastReminded: source.lastReminded && typeof source.lastReminded === 'object' ? source.lastReminded : {},
       weeklyPlans: source.weeklyPlans && typeof source.weeklyPlans === 'object' && !Array.isArray(source.weeklyPlans)
         ? source.weeklyPlans : {},
-      account: source.account && typeof source.account === 'object' && !Array.isArray(source.account)
-        ? source.account : defaults.account,
+      syncCode: typeof source.syncCode === 'string' ? source.syncCode : defaults.syncCode,
       serverUrl: typeof source.serverUrl === 'string' ? source.serverUrl : defaults.serverUrl,
       widget: widget
     };
@@ -1327,94 +1328,74 @@
       D['set-scale'].style.setProperty('--fill', ((s - 0.85) / (1.4 - 0.85) * 100) + '%');
     }
     renderVersion();
-    renderAccountArea();
+    renderSyncArea();
   }
 
-  // ---------- 账号与同步（v3.0） ----------
-  var accMode = 'login';
+  // ---------- 多设备同步（同步码） ----------
+  function syncStatusText() {
+    if (!state.settings.syncCode || !state.settings.serverUrl) return '未配置同步';
+    if (state.syncError) return '同步失败：' + state.syncError;
+    return state.lastSyncAt ? ('已同步 · ' + state.lastSyncAt) : '已启用，等待首次同步';
+  }
 
-  function renderAccountArea() {
-    if (!D['acc-server']) return;
-    if (state.settings.serverUrl) D['acc-server'].value = state.settings.serverUrl;
-    var logged = !!(state.account && state.account.email);
-    D['acc-status'].textContent = logged ? ('已登录：' + state.account.email) : '未登录';
-    D['acc-form'].hidden = logged;
-    D['acc-logout-row'].hidden = !logged;
-    D['acc-submit'].textContent = accMode === 'register' ? '注册' : '登录';
-    D['acc-confirm-row'].hidden = accMode !== 'register';
-    D['acc-toggle'].textContent = accMode === 'register' ? '已有账号？登录' : '没有账号？注册';
+  function renderSyncArea() {
+    if (!D['sync-code']) return;
+    D['sync-server'].value = state.settings.serverUrl || '';
+    D['sync-code'].value = state.settings.syncCode
+      ? SC.displaySyncCode(state.settings.syncCode) : '';
+    D['sync-status'].textContent = syncStatusText();
+    D['sync-status'].className = 'set-tip' +
+      (state.syncError ? ' sync-err' : (state.lastSyncAt ? ' sync-ok' : ''));
+    D['sync-clear'].hidden = !state.settings.syncCode;
     updateSyncIndicator();
   }
 
   function updateSyncIndicator() {
     var btn = D['w-sync'];
     if (!btn) return;
-    var logged = !!(state.account && state.account.email);
-    btn.classList.toggle('is-on', logged);
-    btn.title = logged ? ('已登录：' + state.account.email + '（点击打开设置）') : '账号与同步设置';
+    var on = !!(state.settings.syncCode && state.settings.serverUrl);
+    btn.classList.toggle('is-on', on);
+    btn.title = on ? '多设备同步已启用（点击打开设置）' : '多设备同步设置';
   }
 
-  function emailOk(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || ''); }
-
-  async function handleAuthSubmit() {
-    var serverUrl = (D['acc-server'].value || '').trim();
-    var email = (D['acc-email'].value || '').trim();
-    var password = D['acc-password'].value || '';
-    var confirm = D['acc-confirm'].value || '';
+  async function applySyncCode() {
+    var serverUrl = (D['sync-server'].value || '').trim().replace(/\/$/, '');
+    var raw = (D['sync-code'].value || '').trim();
     if (!serverUrl) { showToast('请填写服务器地址', 'error'); return; }
-    if (!emailOk(email)) { showToast('邮箱格式不正确', 'error'); return; }
-    if (!password) { showToast('请输入密码', 'error'); return; }
-    if (accMode === 'register') {
-      if (password.length < 6) { showToast('密码至少 6 位', 'error'); return; }
-      if (password !== confirm) { showToast('两次密码不一致', 'error'); return; }
-    }
+    if (!SC.isValidSyncCode(raw)) { showToast('同步码格式不正确（16 位）', 'error'); return; }
+    var code = SC.normalizeSyncCode(raw);
     state.settings.serverUrl = serverUrl;
+    state.settings.syncCode = code;
+    state.syncError = '';
     await persistSettings();
-    D['acc-submit'].disabled = true;
-    try {
-      var method = accMode === 'register' ? 'authRegister' : 'authLogin';
-      var result = await apiCall(method, { ok: false }, { email: email, password: password, serverUrl: serverUrl });
-      if (result && result.ok) {
-        state.account = { email: result.email };
-        renderAccountArea();
-        showToast(accMode === 'register' ? '注册成功，已登录' : '已登录 ' + result.email, 'ok');
-        D['acc-password'].value = '';
-        D['acc-confirm'].value = '';
-      } else {
-        showToast((result && result.error) || '操作失败', 'error');
-      }
-    } finally {
-      D['acc-submit'].disabled = false;
-    }
-  }
-
-  function switchAccMode() {
-    accMode = accMode === 'login' ? 'register' : 'login';
-    renderAccountArea();
-    D['acc-password'].value = '';
-    D['acc-confirm'].value = '';
-    if (D['acc-email']) D['acc-email'].focus();
-  }
-
-  async function handleForgot() {
-    var serverUrl = (D['acc-server'].value || '').trim();
-    var email = (D['acc-email'].value || '').trim();
-    if (!serverUrl) { showToast('请填写服务器地址', 'error'); return; }
-    if (!emailOk(email)) { showToast('邮箱格式不正确', 'error'); return; }
-    var result = await apiCall('authForgot', { ok: false }, { email: email, serverUrl: serverUrl });
-    if (result && result.ok) showToast('若邮箱存在，重置链接已发送到邮箱', 'ok');
-    else showToast((result && result.error) || '请求失败', 'error');
-  }
-
-  async function handleLogout() {
-    var result = await apiCall('authLogout', { ok: false });
-    if (result && result.ok) {
-      state.account = null;
-      renderAccountArea();
-      showToast('已退出登录');
+    var result = await apiCall('syncApply', { ok: false }, { code: code, serverUrl: serverUrl });
+    if (!result || !result.ok) {
+      state.syncError = (result && result.error) || '同步启用失败';
+      showToast(state.syncError, 'error');
     } else {
-      showToast('退出失败', 'error');
+      showToast('同步已启用', 'ok');
     }
+    renderSyncArea();
+  }
+
+  function generateSyncCode() {
+    D['sync-code'].value = SC.displaySyncCode(SC.generateSyncCode());
+    D['sync-code'].focus();
+  }
+
+  async function copySyncCode() {
+    var code = SC.normalizeSyncCode(D['sync-code'].value);
+    if (!code) { showToast('请先生成或填写同步码', 'error'); return; }
+    await copyText(SC.displaySyncCode(code), '同步码已复制，请妥善保存');
+  }
+
+  async function clearSyncCode() {
+    state.settings.syncCode = '';
+    state.syncError = '';
+    await persistSettings();
+    await apiCall('syncClear', { ok: false });
+    renderSyncArea();
+    showToast('已退出同步（云端数据保留）');
   }
 
   function openSettings() {
@@ -1536,12 +1517,12 @@
     D['w-settings'].addEventListener('click', openSettings);
     if (D['w-sync']) D['w-sync'].addEventListener('click', function () {
       openSettings();
-      if (D['acc-server']) D['acc-server'].focus();
+      if (D['sync-server']) D['sync-server'].focus();
     });
-    if (D['acc-submit']) D['acc-submit'].addEventListener('click', handleAuthSubmit);
-    if (D['acc-toggle']) D['acc-toggle'].addEventListener('click', switchAccMode);
-    if (D['acc-forgot']) D['acc-forgot'].addEventListener('click', handleForgot);
-    if (D['acc-logout']) D['acc-logout'].addEventListener('click', handleLogout);
+    D['sync-apply'].addEventListener('click', applySyncCode);
+    D['sync-generate'].addEventListener('click', generateSyncCode);
+    D['sync-copy'].addEventListener('click', copySyncCode);
+    D['sync-clear'].addEventListener('click', clearSyncCode);
     D['w-prev'].addEventListener('click', function () {
       if (state.settings.widget.expanded) shiftMonth(-1); else shiftWeek(-1);
     });
@@ -1707,9 +1688,8 @@
       'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'set-opacity', 'set-opacity-val', 'set-scale', 'set-scale-val', 'btn-quit', 'toast',
       'app-version', 'check-update',
       'w-sync',
-      'acc-block', 'acc-server', 'acc-status', 'acc-form', 'acc-email', 'acc-password',
-      'acc-confirm', 'acc-confirm-row', 'acc-submit', 'acc-toggle', 'acc-forgot',
-      'acc-logout', 'acc-logout-row'
+      'sync-block', 'sync-server', 'sync-code', 'sync-status',
+      'sync-apply', 'sync-generate', 'sync-copy', 'sync-clear'
     ].forEach(function (id) {
       D[id] = $(id);
     });
@@ -1747,7 +1727,6 @@
     ]);
 
     state.settings = mergeSettings(results[0]);
-    state.account = (state.settings && state.settings.account) || null;
     state.tasks = normalizeTasks(results[1]);
     state.logs = results[2] && typeof results[2] === 'object' && !Array.isArray(results[2])
       ? results[2]
@@ -1760,6 +1739,18 @@
   }
 
   function subscribeBridge() {
+    if (typeof bridge.onSyncStatus === 'function') {
+      bridge.onSyncStatus(function (s) {
+        if (!s) return;
+        if (s.ok) {
+          state.syncError = '';
+          state.lastSyncAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        } else {
+          state.syncError = s.error || '同步失败';
+        }
+        renderSyncArea();
+      });
+    }
     if (typeof bridge.onRefresh === 'function') {
       bridge.onRefresh(async function () {
         try {

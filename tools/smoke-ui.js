@@ -196,8 +196,14 @@ async function main() {
     results['根字号随缩放变化（14px * 1.25 = 17.5px）'] =
       await ev("getComputedStyle(document.documentElement).fontSize === '17.5px'");
     results['字号缩放覆盖卡片标题'] = await ev("(function(){var r=document.documentElement;var n=document.querySelector('.card-title');if(!n)return false;r.style.setProperty('--w-scale','1');var a=parseFloat(getComputedStyle(n).fontSize);r.style.setProperty('--w-scale','1.25');var b=parseFloat(getComputedStyle(n).fontSize);return b>a;})()");
-    results['账号输入框改为暖纸可见背景'] =
-      await ev("(function(){var s=getComputedStyle(document.getElementById('acc-server'));return s.backgroundColor.indexOf('255, 255, 255, 0.14')<0;})()");
+    results['同步区输入框改为暖纸可见背景'] =
+      await ev("(function(){var s=getComputedStyle(document.getElementById('sync-server'));return s.backgroundColor.indexOf('255, 255, 255, 0.14')<0;})()");
+    results['账号体系 UI 已移除'] =
+      await ev("!document.getElementById('acc-email') && !document.getElementById('acc-password') && !document.getElementById('acc-submit')");
+    results['同步码区控件齐全'] =
+      await ev("!!document.getElementById('sync-code') && !!document.getElementById('sync-apply') && !!document.getElementById('sync-generate') && !!document.getElementById('sync-clear')");
+    results['同步码模块在渲染进程可用'] =
+      await ev("(function(){var c=window.SyncCode.generateSyncCode();return window.SyncCode.isValidSyncCode(c) && window.SyncCode.displaySyncCode(c).length===19;})()");
     results['默认透明度归一为 0.9'] =
       await ev("(function(){var m=getComputedStyle(document.body).backgroundColor.match(/rgba?\\([^)]*?,\\s*([\\d.]+)\\)/);return !!m && Math.abs(parseFloat(m[1])-0.9)<0.01;})()");
     results['两窗口均有 CSP 声明'] =

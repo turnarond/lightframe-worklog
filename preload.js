@@ -22,12 +22,9 @@ contextBridge.exposeInMainWorld('api', {
   loadSettings: function () { return ipcRenderer.invoke('settings:load'); },
   saveSettings: function (settings) { return ipcRenderer.invoke('settings:save', settings); },
 
-  // 账号 / 同步（v3.0）
-  authLogin: function (payload) { return ipcRenderer.invoke('auth:login', payload); },
-  authRegister: function (payload) { return ipcRenderer.invoke('auth:register', payload); },
-  authLogout: function () { return ipcRenderer.invoke('auth:logout'); },
-  authStatus: function () { return ipcRenderer.invoke('auth:status'); },
-  authForgot: function (payload) { return ipcRenderer.invoke('auth:forgot', payload); },
+  // 多设备同步（同步码）
+  syncApply: function (payload) { return ipcRenderer.invoke('sync:apply', payload); },
+  syncClear: function () { return ipcRenderer.invoke('sync:clear'); },
 
   // 应用动作
   copyText: function (text) { return ipcRenderer.invoke('app:copy', text); },
@@ -69,5 +66,11 @@ contextBridge.exposeInMainWorld('api', {
     const handler = function (_event, tab) { cb(tab); };
     ipcRenderer.on('open-tab', handler);
     return function () { ipcRenderer.removeListener('open-tab', handler); };
+  },
+  onSyncStatus: function (cb) {
+    if (typeof cb !== 'function') return function () {};
+    const handler = function (_event, payload) { cb(payload); };
+    ipcRenderer.on('sync:status', handler);
+    return function () { ipcRenderer.removeListener('sync:status', handler); };
   }
 });

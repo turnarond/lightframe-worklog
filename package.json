@@ -7,7 +7,8 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node --test src/*.test.js",
+    "test": "node --test src/*.test.js server-lite/*.test.js",
+    "sync:server": "node server-lite/server.js",
     "icon": "node tools/genicon.js",
     "smoke": "node tools/smoke-ui.js",
     "dist": "electron-builder --win nsis",

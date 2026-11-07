@@ -99,6 +99,7 @@ class SyncEngine {
     this.getMeta = opts.getMeta;
     this.setMeta = opts.setMeta;
     // 默认使用浏览器/Node 原生 fetch；测试可注入假实现
+    this.onError = opts.onError || function () {};
     this.fetchImpl = opts.fetchImpl || function (method, url, body) {
       return fetch(url, {
         method: method,
@@ -152,9 +153,18 @@ class SyncEngine {
     for (const type of TYPES) {
       if (!meta[type]) meta[type] = { lastPull: 0, pushCursor: 0 };
       const since = meta[type].lastPull || 0;
-      const res = await this.fetchImpl('GET',
-        this.baseUrl + '/api/sync/pull?since=' + since + '&types=' + type, null);
-      if (!res.ok) continue;
+      let res;
+      try {
+        res = await this.fetchImpl('GET',
+          this.baseUrl + '/api/sync/pull?since=' + since + '&types=' + type, null);
+      } catch (err) {
+        this.onError('拉取 ' + type + ' 失败：' + ((err && err.message) || '网络异常'));
+        continue;
+      }
+      if (!res.ok) {
+        this.onError('拉取 ' + type + ' 失败：HTTP ' + res.status);
+        continue;
+      }
       const changes = (res.json && res.json.changes) || [];
       const remoteRows = changes.filter(c => c.type === type).map(fromWire);
       const local = await this.getLocal(type);
@@ -181,9 +191,18 @@ class SyncEngine {
       const rows = await this.getLocal(type);
       const dirty = dirtyDiff(rows, meta[type].pushCursor || 0);
       if (!dirty.length) continue;
-      const res = await this.fetchImpl('POST',
-        this.baseUrl + '/api/sync/push', { changes: toWire(dirty, type) });
-      if (!res.ok) continue;
+      let res;
+      try {
+        res = await this.fetchImpl('POST',
+          this.baseUrl + '/api/sync/push', { changes: toWire(dirty, type) });
+      } catch (err) {
+        this.onError('推送 ' + type + ' 失败：' + ((err && err.message) || '网络异常'));
+        continue;
+      }
+      if (!res.ok) {
+        this.onError('推送 ' + type + ' 失败：HTTP ' + res.status);
+        continue;
+      }
       if (res.json && res.json.server_time) serverTime = toMs(res.json.server_time);
       meta[type].pushCursor = serverTime;
     }

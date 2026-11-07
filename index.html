@@ -254,40 +254,24 @@
         <p class="set-tip">越小越透明、越像桌面背景；默认 90% 保持普通应用的不透明观感。</p>
       </section>
 
-      <section class="set-block" id="acc-block">
-        <h3>账号与同步</h3>
+      <section class="set-block" id="sync-block">
+        <h3>多设备同步</h3>
         <div class="set-row">
           <span class="lbl">服务器地址</span>
-          <input type="url" id="acc-server" class="text-input" placeholder="https://sync.example.com" aria-label="同步服务器地址" />
+          <input type="url" id="sync-server" class="text-input" placeholder="https://sync.example.com" aria-label="同步服务器地址" />
         </div>
-        <p id="acc-status" class="set-tip">未登录</p>
-
-        <div id="acc-form">
-          <div class="set-row">
-            <span class="lbl">邮箱</span>
-            <input type="email" id="acc-email" class="text-input" placeholder="you@example.com" aria-label="邮箱" />
-          </div>
-          <div class="set-row">
-            <span class="lbl">密码</span>
-            <input type="password" id="acc-password" class="text-input" placeholder="至少 6 位" aria-label="密码" />
-          </div>
-          <div class="set-row" id="acc-confirm-row">
-            <span class="lbl">确认密码</span>
-            <input type="password" id="acc-confirm" class="text-input" placeholder="再次输入密码" aria-label="确认密码" />
-          </div>
-          <div class="acc-actions">
-            <button class="btn-mini primary" id="acc-submit" type="button">登录</button>
-            <button class="btn-link" id="acc-toggle" type="button">没有账号？注册</button>
-          </div>
-          <div class="acc-actions">
-            <button class="btn-link" id="acc-forgot" type="button">忘记密码</button>
-          </div>
+        <div class="set-row">
+          <span class="lbl">同步码</span>
+          <input type="text" id="sync-code" class="text-input sync-code" spellcheck="false" autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX" aria-label="同步码" />
         </div>
-
-        <div class="acc-actions" id="acc-logout-row" hidden>
-          <button class="btn-mini" id="acc-logout" type="button">退出登录</button>
+        <p id="sync-status" class="set-tip">未配置同步</p>
+        <div class="acc-actions">
+          <button class="btn-mini primary" id="sync-apply" type="button">启用同步</button>
+          <button class="btn-mini" id="sync-generate" type="button">生成新码</button>
+          <button class="btn-mini" id="sync-copy" type="button">复制</button>
+          <button class="btn-mini danger" id="sync-clear" type="button" hidden>退出同步</button>
         </div>
-        <p class="set-tip">登录后，任务 / 日报 / 偏好会自动增量同步到云端；断网照常用，恢复网络后自动补同步。</p>
+        <p class="set-tip">填入同一同步码的设备共享任务 / 日报 / 偏好。请自行保存同步码：丢失后无法取回云端数据，换码等于换空间。</p>
       </section>
 
       <button class="btn-quit" id="btn-quit" type="button">退出应用</button>
@@ -351,6 +335,7 @@
 </div>
 
 <script src="src/defaultCategories.js"></script>
+<script src="src/syncCode.js"></script>
 <script src="src/editor.js"></script>
 <script src="src/taskModel.js"></script>
 <script src="src/report.js"></script>

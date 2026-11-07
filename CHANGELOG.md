@@ -2,6 +2,20 @@
 
 语义化版本（SemVer）。每个版本记录 Added / Changed / Fixed。
 
+## [Unreleased] · 同步码多设备同步
+
+### Added
+- `server-lite/`：零 npm 依赖的 Node 极简同步服务端（单文件 JSON 存储、temp+rename 原子写、请求串行化、记录级 LWW、服务端单调逻辑时钟游标）。
+- `src/syncCode.js`：80 bit 同步码生成 / 规范化 / 展示（Crockford Base32，UMD 前后端共用）。
+- 设置页「多设备同步」区：服务器地址、同步码、启用 / 生成 / 复制 / 退出；移除邮箱密码账号体系。
+- 启动 `syncNow()` + 30s 周期同步 + 在线判断；同步失败不再静默，界面显示原因与最近成功时间。
+- 服务端单测、双设备端到端联调与打包版烟测断言。
+
+### Changed
+- `src/sync.js` 的 pull/push 网络失败由静默 `continue` 改为 `onError` 上报。
+- 服务端 pull 增量游标改用服务端接收时刻 `_storedAt`，不再混用客户端 `updatedAt` 与服务端 `server_time` 两个时钟域。
+- 删除 `src/authClient.js` 及 5 个 auth IPC；`settings.account` 由 `settings.syncCode` 取代，启动时清理历史账号字段。
+
 ## [2.5.1] - 2026-11-02 · 每日待办提醒合并 + 挂件壁纸态
 
 ### Added

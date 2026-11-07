@@ -11,7 +11,10 @@ function normalizeStartupSettings(settings) {
   var src = settings && typeof settings === 'object' ? settings : {};
   var widget = src.widget && typeof src.widget === 'object' ? src.widget : {};
   var next = {};
-  Object.keys(src).forEach(function (key) { next[key] = src[key]; });
+  Object.keys(src).forEach(function (key) {
+    if (key === 'account') return;   // 历史账号体系已废弃
+    next[key] = src[key];
+  });
   var nextWidget = {};
   Object.keys(widget).forEach(function (key) {
     if (key === 'clickThrough') return;   // 历史废弃字段

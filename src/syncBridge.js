@@ -76,7 +76,8 @@ function createSyncBridge(opts) {
     getMeta: getMeta,
     setMeta: setMeta,
     fetchImpl: opts.fetchImpl,
-    debounceMs: opts.debounceMs
+    debounceMs: opts.debounceMs,
+    onError: opts.onError
   });
 
   // 记录当前同步偏好键的改动时间戳（仅当用户真实改了偏好时）

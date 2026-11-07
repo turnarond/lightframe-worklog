@@ -1602,3 +1602,12 @@ body.ready .reveal { opacity: 1; transform: none; }
   cursor: pointer;
 }
 .toast-action:hover { background: rgba(255, 255, 255, .2); }
+
+/* 同步码：等宽字距便于手抄核对；状态行着色 */
+.sync-code {
+  font-family: var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+#sync-status.sync-ok { color: var(--green); }
+#sync-status.sync-err { color: var(--p-high); }
