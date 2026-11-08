@@ -15,6 +15,7 @@
 - **外网访问（Cloudflare Tunnel / H3）**：`npm run fetch:cloudflared` 预下载二进制（不入库），`pack:sync` 把 `cloudflared.exe` + `enable-tunnel.ps1` / `disable-tunnel.ps1` 打进包；Quick 模式零配置拿临时 HTTPS 域名（重启会变），Named 模式支持固定域名；`deploy:ssh -EnableTunnel` 一键启用并回显地址。
 - **局域网端到端验证**：`tools/verify-lan.js` 用两个独立 `SyncEngine` 走真实 HTTP 验证双向同步 / LWW / 隔离 / 三类记录往返；`--self-host` 可未经局域网网卡 IP 自测（9 项已通过）；`deploy:ssh` 部署末尾自动执行，`-SkipVerify` 可跳过。
 - 修复 SSH 远端执行隐患：原用 `powershell -Command -` + stdin，实测 PowerShell 5.1 会在 stdin 开头写入 BOM 导致首条命令无法识别；改为随包分发 `remote-install.ps1`、以 `-File` 执行。
+- **局域网部署实测通过**（`192.168.31.32`，2026-11-08）：修复目标机网络位置为「公用」而防火墙规则只覆盖 Private/Domain 导致跨机超时——规则改为覆盖全部 profile 且 `-RemoteAddress LocalSubnet` 限制本地子网；修复重部署时旧 `node.exe` 被进程锁占用导致 `Remove-Item` 失败（先注销任务、释放 8080、带重试删目录，再解压安装）；SSH 远端/本地统一 UTF-8 输出解决中文乱码。最终 `LAN_HEALTH_OK` + `LAN_E2E_OK`，计划任务 `Running`。
 
 ### Changed
 - `src/sync.js` 的 pull/push 网络失败由静默 `continue` 改为 `onError` 上报。

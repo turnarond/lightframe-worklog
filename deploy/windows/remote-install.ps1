@@ -12,6 +12,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# 远端输出统一 UTF-8，避免中文经 SSH 管道按 GBK/UTF-8 错配显示成乱码
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$OutputEncoding = [Text.Encoding]::UTF8
+
 $zip = Join-Path $HOME 'lightframe-sync-server.zip'
 $dst = Join-Path $HOME 'lightframe-sync'
 
@@ -22,7 +26,29 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 if (-not (Test-Path $zip)) { throw "找不到部署包：$zip" }
-if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
+
+# 重新部署：必须在删目录「之前」注销旧任务并释放 8080，
+# 否则运行中的 node.exe 被文件锁占用，Remove-Item 会报「访问被拒绝」。
+# 用 Unregister 而非 Stop，避免「崩溃自动重启」把进程又拉起来。
+$oldTask = Get-ScheduledTask -TaskName 'LightframeSync' -ErrorAction SilentlyContinue
+if ($oldTask) {
+  Stop-ScheduledTask -TaskName 'LightframeSync' -ErrorAction SilentlyContinue
+  Unregister-ScheduledTask -TaskName 'LightframeSync' -Confirm:$false -ErrorAction SilentlyContinue
+}
+Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+  ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 2
+
+# 进程退出可能略有延迟，删除带重试
+for ($i = 0; $i -lt 5; $i++) {
+  try {
+    if (Test-Path $dst) { Remove-Item $dst -Recurse -Force -ErrorAction Stop }
+    break
+  } catch {
+    if ($i -eq 4) { throw }
+    Start-Sleep -Seconds 1
+  }
+}
 Expand-Archive -Path $zip -DestinationPath $dst -Force
 
 $install = Join-Path $dst 'install.ps1'

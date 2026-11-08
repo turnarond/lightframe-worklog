@@ -78,7 +78,8 @@
    powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
    ```
 
-   脚本会：优先使用包内 `runtime\node.exe`（目标机**无需预装 Node**，也避免非交互调用 winget 失败）→ 创建 `C:\ProgramData\lightframe-sync\data` 并收紧权限 → 生成 `start.cmd` → 放行入站 TCP 8080（仅 Private/Domain 网络）→ 注册计划任务 `LightframeSync`（SYSTEM 身份、开机自启、崩溃自动重启）→ 做一次健康检查。若网络位置是「公用」会给出警告（那种情况下其它设备可能连不上）。
+   脚本会：优先使用包内 `runtime\node.exe`（目标机**无需预装 Node**，也避免非交互调用 winget 失败）→ 创建 `C:\ProgramData\lightframe-sync\data` 并收紧权限 → 生成 `start.cmd` → 放行入站 TCP 8080 → 注册计划任务 `LightframeSync`（SYSTEM 身份、开机自启、崩溃自动重启）→ 做一次健康检查。
+   防火墙规则**覆盖 Domain/Private/Public 全部网络位置**（不少 WLAN 机器默认是「公用」，只放行 Private/Domain 会导致「安装成功但别的设备连不上」），同时用 `-RemoteAddress LocalSubnet` 把来源限制在局域网，不会暴露到公网；规则幂等重建，重跑不会产生重复项。
 
 3. 看到「安装完成」后，记下输出的 `客户端填 : http://192.168.31.32:8080`。
 

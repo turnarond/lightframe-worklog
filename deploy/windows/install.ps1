@@ -87,18 +87,22 @@ $body = $body.Replace('__NODE__', $nodeExe)
 [IO.File]::WriteAllText($startCmd, $body, [Text.Encoding]::ASCII)
 Write-Host "已生成: $startCmd"
 
-# 4) 防火墙：只放行 Private/Domain，不对 Public 网络开放
+# 4) 防火墙：profile 必须含 Public —— 不少 Windows 机器（尤其 WLAN）默认网络位置是「公用」，
+#    只放行 Private/Domain 会出现「安装成功但局域网内其它设备连不上」。
+#    用 -RemoteAddress LocalSubnet 把来源限制在局域网，避免在公用网络暴露到公网。
 if (-not $SkipFirewall) {
-  if (-not (Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue)) {
-    New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Protocol TCP `
-      -LocalPort $Port -Action Allow -Profile Private,Domain | Out-Null
-    Write-Host "已放行入站 TCP $Port（仅 Private/Domain）"
-  }
+  Get-NetFirewallRule -ErrorAction SilentlyContinue |
+    Where-Object { $_.DisplayName -eq $RuleName } |
+    Remove-NetFirewallRule -ErrorAction SilentlyContinue
+  New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Protocol TCP `
+    -LocalPort $Port -Action Allow -Profile Domain,Private,Public `
+    -RemoteAddress LocalSubnet | Out-Null
+  Write-Host "已放行入站 TCP $Port（覆盖所有网络位置，来源仅限本地子网）"
 }
 
 $netProfile = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($netProfile -and $netProfile.NetworkCategory -eq 'Public') {
-  Write-Warning '当前网络位置是「公用」：防火墙规则只放行 专用/域，其它设备可能连不上。请在 Windows 设置里把该网络改为「专用」，或自行放行 Public 配置文件。'
+  Write-Host '当前网络位置为「公用」；规则已覆盖该位置，且来源限制为本地子网，不会暴露到公网。'
 }
 
 # 5) 计划任务：SYSTEM 身份、开机启动、崩溃自动重启

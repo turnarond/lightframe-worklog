@@ -146,6 +146,8 @@
 - `install.ps1`：定位/安装 Node LTS → 建 `%ProgramData%\lightframe-sync\data` 并收紧 ACL → 生成 `start.cmd` 带 `PORT`/`DATA_DIR` → 放行入站 TCP 8080 但**仅 Private/Domain** → 注册计划任务 `LightframeSync`（SYSTEM、开机自启、崩溃重启）→ health 自检。
 - Windows PowerShell 5.1 按 ANSI 读取无 BOM 的 `.ps1`，中文会乱码导致语法错乱；三个脚本统一写成 **UTF-8 with BOM**，打包时再强制转换一次，并有 `cleanup.test.js` 护栏防回归。
 - 已解压实测：包内 `require` 路径正确、服务可起、`health.ok=true`、push/pull 正常。
+- **局域网真实部署验收（2026-11-08，目标机 `192.168.31.32`）已通过**：SSH 密钥认证 → scp 上传 → 远端安装 → `REMOTE_HEALTH_OK` → `LAN_HEALTH_OK` → 9 项跨机双设备同步断言全绿 → `LAN_E2E_OK`；计划任务 `Running`。
+  实测中修正三个部署期缺陷：① 目标机网络位置为 `Public` 而防火墙规则仅 `Private,Domain` → 规则覆盖全部 profile 并加 `-RemoteAddress LocalSubnet`；② 重部署时旧 `node.exe` 被进程锁占用导致删目录失败 → 先注销任务、释放 8080 端口、带重试删目录；③ 复杂命令经 ssh `-Command` 传参时引号被 cmd 剥离 → 一律用 `-File`，并在两端统一 UTF-8 输出编码消除中文乱码。
 - **内网限制**：`192.168.31.32` 只有同网段设备可达；外网同步需 H3（Cloudflare Tunnel，不用公网 IP / 端口映射 / 备案），且必须启用 HTTPS。
 - 原 Linux ECS 的 `systemd` 方案保留在 `server-lite/README.md` 作备选；数据目录每日压缩保留 7 天。
 

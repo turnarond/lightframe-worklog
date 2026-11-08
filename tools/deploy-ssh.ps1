@@ -25,6 +25,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# 远端脚本已按 UTF-8 输出，本地读取 native stdout 也统一 UTF-8，避免中文日志乱码
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 $repo = Split-Path -Parent $PSScriptRoot
 $zip = Join-Path $repo 'dist\lightframe-sync-server.zip'
 $remoteZip = 'lightframe-sync-server.zip'
