@@ -162,6 +162,7 @@
 - **客户端单测**：码生成熵与格式、normalize、`mergeSettings` 保留 `syncCode`、失败上报。
 - **端到端**：本地起服务，用两个临时 `userData` 的 Electron 实例（或 fake fetch 双客户端）验证「A 建码 → B 加入 → 双向改动 → 离线恢复 → 冲突取新」。
 - **打包烟测** `npm run smoke`：新增同步码区 UI 存在、账号 UI 不存在、未配置时不发起请求。
+- **局域网端到端**（`tools/verify-lan.js`）：两个独立 `SyncEngine` 走真实 HTTP；`--self-host` 经本机网卡 IP 自测（9 项已通过），部署后指定目标 URL 跨机验收，`deploy:ssh` 末尾自动执行并输出 `LAN_E2E_OK`。
 
 ## 12. 分阶段实施
 

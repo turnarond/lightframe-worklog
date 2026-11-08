@@ -12,6 +12,7 @@
     "pack:sync": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/pack-sync-server.ps1",
     "fetch:cloudflared": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/fetch-cloudflared.ps1",
     "deploy:ssh": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/deploy-ssh.ps1",
+    "verify:lan": "node tools/verify-lan.js",
     "icon": "node tools/genicon.js",
     "smoke": "node tools/smoke-ui.js",
     "dist": "electron-builder --win nsis",

@@ -98,6 +98,20 @@
 
 **同步码丢失无法取回云端数据**；持有码者可读写该空间全部数据，请自行保管。
 
+## 局域网端到端验证
+
+`tools/verify-lan.js` 用两个独立 `SyncEngine`（模拟两台设备）通过**真实 HTTP** 验证：health、A→B 同步、LWW 冲突取新、旧版本不回退、不同同步码隔离、`daily_logs` / `prefs` 往返、无错误上报。每次生成全新同步码，不污染已有空间。
+
+```powershell
+# 未部署目标机时：本机自带临时服务端，经局域网网卡 IP（非 127.0.0.1）自测
+npm run verify:lan -- --self-host
+
+# 部署完成后：跨机验收目标机
+npm run verify:lan -- http://192.168.31.32:8080
+```
+
+`npm run deploy:ssh` 默认会在部署末尾自动跑这一步并输出 `LAN_E2E_OK`；加 `-SkipVerify` 可跳过。本机自测已通过 9 项断言。
+
 ## 验证与排查
 
 ```powershell

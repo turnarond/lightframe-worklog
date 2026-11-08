@@ -20,7 +20,8 @@ param(
   [int]$Port = 8080,
   [string]$Key = "$env:USERPROFILE\.ssh\lightframe_deploy_ed25519",
   [switch]$UploadOnly,
-  [switch]$EnableTunnel
+  [switch]$EnableTunnel,
+  [switch]$SkipVerify
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,46 +64,37 @@ SSH 认证失败：$probe
 }
 Write-Host 'SSH 认证通过（密钥方式，无口令交互）'
 
-# 2) 传包
+# 2) 传包 + 远端入口脚本
 Write-Host '--- 上传部署包 ---'
 $dest = ('{0}@{1}:{2}' -f $User, $Target, $remoteZip)
+$remoteEntry = 'lightframe-sync-remote.ps1'
+$entrySrc = Join-Path $repo 'deploy\windows\remote-install.ps1'
+$entryDest = ('{0}@{1}:{2}' -f $User, $Target, $remoteEntry)
 $ErrorActionPreference = 'Continue'
-try { & scp.exe @scpArgs $zip $dest } finally { $ErrorActionPreference = $prevEap }
-if ($LASTEXITCODE -ne 0) { throw 'scp 上传失败' }
-Write-Host ("已上传 {0} ({1} MB)" -f $remoteZip, [math]::Round((Get-Item $zip).Length / 1MB, 1))
+try {
+  & scp.exe @scpArgs $zip $dest
+  $zipExit = $LASTEXITCODE
+  & scp.exe @scpArgs $entrySrc $entryDest
+  $entryExit = $LASTEXITCODE
+} finally { $ErrorActionPreference = $prevEap }
+if ($zipExit -ne 0 -or $entryExit -ne 0) { throw 'scp 上传失败' }
+Write-Host ("已上传 {0} ({1} MB) 与远端入口脚本" -f $remoteZip, [math]::Round((Get-Item $zip).Length / 1MB, 1))
 
 if ($UploadOnly) {
   Write-Host '仅上传模式，跳过安装。'
   return
 }
 
-# 3) 远端解压 + 安装（脚本经 stdin 传给远端 powershell，避开多层引号嵌套）
-$remoteScript = @'
-$ErrorActionPreference = 'Stop'
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($identity)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-  throw 'SSH 会话未获得管理员令牌。请在目标机上用 RDP / 本地管理员 PowerShell 手动执行一次 install.ps1。'
-}
-$zip = Join-Path $HOME 'lightframe-sync-server.zip'
-$dst = Join-Path $HOME 'lightframe-sync'
-if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
-Expand-Archive -Path $zip -DestinationPath $dst -Force
-& (Join-Path $dst 'install.ps1') -Port __PORT__
-$h = Invoke-RestMethod "http://127.0.0.1:__PORT__/api/health" -TimeoutSec 5
-Write-Host "REMOTE_HEALTH_OK service=$($h.service)"
-$tunnelMode = '__TUNNEL_MODE__'
-if ($tunnelMode -eq 'Quick') {
-  & (Join-Path $dst 'enable-tunnel.ps1') -Mode Quick -Port __PORT__
-}
-'@
-$remoteScript = $remoteScript.Replace('__PORT__', [string]$Port)
-$remoteScript = $remoteScript.Replace('__TUNNEL_MODE__', $(if ($EnableTunnel) { 'Quick' } else { '' }))
+# 3) 远端执行：用 -File 调用单独上传的入口脚本。
+#    不用 `powershell -Command -` + stdin：PowerShell 5.1 经管道写入时会在开头加 BOM，
+#    远端会把 BOM 当成第一条命令的一部分而报「无法识别」。
+$tunnelMode = $(if ($EnableTunnel) { 'Quick' } else { 'None' })
+$remoteCmd = ('powershell -NoProfile -ExecutionPolicy Bypass -File {0} -Port {1} -TunnelMode {2}' -f $remoteEntry, $Port, $tunnelMode)
 
 Write-Host '--- 远端安装 ---'
 $ErrorActionPreference = 'Continue'
 try {
-  $output = $remoteScript | & ssh.exe @sshArgs 'powershell -NoProfile -ExecutionPolicy Bypass -Command -' 2>&1 | Out-String
+  $output = (& ssh.exe @sshArgs $remoteCmd 2>&1 | Out-String)
 } finally {
   $ErrorActionPreference = $prevEap
 }
@@ -121,6 +113,18 @@ try {
 } catch {
   Write-Warning ("目标机本机自检通过，但从这台机器访问 {0}:{1} 失败：{2}" -f $Target, $Port, $_.Exception.Message)
   Write-Warning '常见原因：目标机网络位置为「公用」（防火墙规则仅放行 专用/域），或中间设备隔离了客户端。'
+}
+
+# 5) 端到端同步验证：真实 HTTP + 两个独立 SyncEngine（模拟两台设备）
+if (-not $SkipVerify) {
+  Write-Host '--- 局域网端到端同步验证 ---'
+  $ErrorActionPreference = 'Continue'
+  try {
+    & node.exe (Join-Path $repo 'tools\verify-lan.js') ("http://{0}:{1}" -f $Target, $Port)
+    $e2eExit = $LASTEXITCODE
+  } finally { $ErrorActionPreference = $prevEap }
+  if ($e2eExit -ne 0) { throw '局域网端到端同步验证未通过，详见上方输出' }
+  Write-Host 'LAN_E2E_OK' -ForegroundColor Green
 }
 
 $tunnelMatch = [regex]::Match($output, 'TUNNEL_URL=(https://\S+)')

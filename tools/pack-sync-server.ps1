@@ -16,6 +16,7 @@ $required = @(
   'deploy\windows\uninstall.ps1',
   'deploy\windows\enable-tunnel.ps1',
   'deploy\windows\disable-tunnel.ps1',
+  'deploy\windows\remote-install.ps1',
   'deploy\windows\README.md'
 )
 foreach ($f in $required) {
@@ -34,10 +35,12 @@ try {
   Copy-Item (Join-Path $repo 'deploy\windows\README.md') (Join-Path $stage 'README.md')
   Copy-Item (Join-Path $repo 'deploy\windows\enable-tunnel.ps1') (Join-Path $stage 'enable-tunnel.ps1')
   Copy-Item (Join-Path $repo 'deploy\windows\disable-tunnel.ps1') (Join-Path $stage 'disable-tunnel.ps1')
+  Copy-Item (Join-Path $repo 'deploy\windows\remote-install.ps1') (Join-Path $stage 'remote-install.ps1')
 
   # Windows PowerShell 5.1 按 ANSI 读取无 BOM 的 .ps1，中文会造成引号错乱；
   # 无论仓库源文件是否带 BOM，产物统一写成 UTF-8 with BOM。
-  foreach ($name in @('install.ps1', 'uninstall.ps1', 'enable-tunnel.ps1', 'disable-tunnel.ps1')) {
+  foreach ($name in @('install.ps1', 'uninstall.ps1', 'enable-tunnel.ps1',
+                      'disable-tunnel.ps1', 'remote-install.ps1')) {
     $ps1 = Join-Path $stage $name
     $text = [IO.File]::ReadAllText($ps1, [Text.Encoding]::UTF8)
     [IO.File]::WriteAllText($ps1, $text, (New-Object Text.UTF8Encoding($true)))
