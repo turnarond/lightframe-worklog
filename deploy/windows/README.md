@@ -62,10 +62,13 @@
    C:\lightframe-sync\
      install.ps1
      uninstall.ps1
+     enable-tunnel.ps1
+     disable-tunnel.ps1
      README.md
      server-lite\server.js
      src\syncCode.js
-     runtime\node.exe        # 自带运行时，目标机无需安装 Node
+     runtime\node.exe          # 自带运行时，目标机无需安装 Node
+     runtime\cloudflared.exe   # 外网访问用（执行过 fetch:cloudflared 才有）
    ```
 
 2. 在目标机上以**管理员身份**打开 PowerShell，执行：
@@ -131,17 +134,56 @@ Get-ChildItem 'D:\backup\lightframe-*.zip' |
   Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } | Remove-Item
 ```
 
-## HTTPS 与外网（部署前必须决策）
+## 外网访问（Cloudflare Tunnel，已内置）
 
-同步码是完整数据访问凭据，明文 HTTP 只适合可信局域网。三种候选（设计稿 §9）：
+部署包自带 `runtime/cloudflared.exe` 与 `enable-tunnel.ps1` / `disable-tunnel.ps1`。**不需要公网 IP、端口映射或备案**，同步流量走正规 HTTPS。
 
-| 方案 | 现金成本 | 说明 |
-|---|---|---|
-| H1 免费域名（DuckDNS）+ Let's Encrypt DNS-01 + 非标端口 | 0 | 需实测国内可达与证书续期 |
-| H2 自签证书 + Electron 固定证书指纹 | 0 | 需改客户端，换证书要重发 |
-| H3 自有域名（约 ¥10~60/年）+ Cloudflare Tunnel | 小额年费 | 最稳：隐藏源站、CF 代管证书、**不用公网 IP、不用映射端口、不用备案** |
+### 一键完成（SSH 部署时）
 
-若目标是「外出也能同步」，**H3 最合适**：在目标机跑 `cloudflared tunnel`，把 `http://127.0.0.1:8080` 映射成一个 HTTPS 域名，客户端 `serverUrl` 填该域名即可。这样也无需在路由器做端口映射。选定后再补具体配置。
+```powershell
+npm run fetch:cloudflared   # 首次：下载约 53MB 二进制到 dist/tools/（不入库）
+npm run pack:sync           # 打进部署包
+npm run deploy:ssh -- -Target 192.168.31.32 -EnableTunnel
+```
+
+部署结束会回显 `外网「服务器地址」：https://xxx.trycloudflare.com`，客户端填它即可。
+
+### 两种模式
+
+| 模式 | 前置条件 | 域名 | 适用 |
+|---|---|---|---|
+| **Quick**（默认） | 无 | `https://xxx.trycloudflare.com`，**每次重启会变** | 验证 / 临时外网访问 |
+| **Named** | 域名托管到 Cloudflare + 交互式 `cloudflared tunnel login` 一次 | `https://sync.example.com` 固定 | 长期多设备同步 |
+
+**Quick**（零账号零域名）：
+
+```powershell
+cd C:\lightframe-sync
+powershell -NoProfile -ExecutionPolicy Bypass -File .\enable-tunnel.ps1
+```
+
+脚本会先检查本机 8080 服务，再注册计划任务 `LightframeSyncTunnel`（开机自启、崩溃重启），从日志抓取临时域名，写入 `%ProgramData%\lightframe-sync\tunnel-url.txt`，并输出 `TUNNEL_URL=...`。
+
+**Named**（稳定域名）：
+
+```powershell
+.\runtime\cloudflared.exe tunnel login   # 浏览器授权，选择已托管的域名
+powershell -NoProfile -ExecutionPolicy Bypass -File .\enable-tunnel.ps1 -Mode Named -Hostname sync.example.com
+```
+
+脚本自动创建 tunnel、配置 DNS 路由、生成 `config.yml`（凭据复制到 `ProgramData` 供 SYSTEM 计划任务读取）并注册开机任务。客户端填 `https://sync.example.com`。
+
+**关闭**：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\disable-tunnel.ps1
+```
+
+默认保留配置，加 `-RemoveConfig` 可删除。
+
+> **Quick 的代价**：域名每次重启都变，客户端要重填。若确实要「外出长期同步」，请走 Named（需一个域名，约 ¥10~60/年）——这是唯一稳定方案。
+> 目标机访问 Cloudflare 不通时，Quick 会在 60 秒后给出警告，日志留在 `%ProgramData%\lightframe-sync\tunnel\quick-tunnel.log` 供排查。
+> 无论哪种模式，同步码仍等价于完整数据访问权，请自行保管。
 
 ## 卸载
 

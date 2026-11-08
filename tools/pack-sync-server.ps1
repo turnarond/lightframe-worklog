@@ -14,6 +14,8 @@ $required = @(
   'src\syncCode.js',
   'deploy\windows\install.ps1',
   'deploy\windows\uninstall.ps1',
+  'deploy\windows\enable-tunnel.ps1',
+  'deploy\windows\disable-tunnel.ps1',
   'deploy\windows\README.md'
 )
 foreach ($f in $required) {
@@ -30,21 +32,32 @@ try {
   Copy-Item (Join-Path $repo 'deploy\windows\install.ps1') (Join-Path $stage 'install.ps1')
   Copy-Item (Join-Path $repo 'deploy\windows\uninstall.ps1') (Join-Path $stage 'uninstall.ps1')
   Copy-Item (Join-Path $repo 'deploy\windows\README.md') (Join-Path $stage 'README.md')
+  Copy-Item (Join-Path $repo 'deploy\windows\enable-tunnel.ps1') (Join-Path $stage 'enable-tunnel.ps1')
+  Copy-Item (Join-Path $repo 'deploy\windows\disable-tunnel.ps1') (Join-Path $stage 'disable-tunnel.ps1')
 
   # Windows PowerShell 5.1 按 ANSI 读取无 BOM 的 .ps1，中文会造成引号错乱；
   # 无论仓库源文件是否带 BOM，产物统一写成 UTF-8 with BOM。
-  foreach ($name in @('install.ps1', 'uninstall.ps1')) {
+  foreach ($name in @('install.ps1', 'uninstall.ps1', 'enable-tunnel.ps1', 'disable-tunnel.ps1')) {
     $ps1 = Join-Path $stage $name
     $text = [IO.File]::ReadAllText($ps1, [Text.Encoding]::UTF8)
     [IO.File]::WriteAllText($ps1, $text, (New-Object Text.UTF8Encoding($true)))
   }
 
   # 自带 node.exe，目标机零前置（避免通过 SSH 非交互调用 winget 安装失败）
+  New-Item -ItemType Directory -Force -Path (Join-Path $stage 'runtime') | Out-Null
   if (-not $NoBundleNode) {
     $nodeExe = (Get-Command node.exe -ErrorAction Stop).Source
-    New-Item -ItemType Directory -Force -Path (Join-Path $stage 'runtime') | Out-Null
     Copy-Item $nodeExe (Join-Path $stage 'runtime\node.exe')
     Write-Host ("已打包 Node 运行时: {0} ({1} MB)" -f $nodeExe, [math]::Round((Get-Item $nodeExe).Length / 1MB, 1))
+  }
+
+  # cloudflared：外网访问（Cloudflare Tunnel）用，可选
+  $cf = Join-Path $repo 'dist\tools\cloudflared.exe'
+  if (Test-Path $cf) {
+    Copy-Item $cf (Join-Path $stage 'runtime\cloudflared.exe')
+    Write-Host ("已打包 cloudflared: {0} MB" -f [math]::Round((Get-Item $cf).Length / 1MB, 1))
+  } else {
+    Write-Warning '未找到 dist/tools/cloudflared.exe：部署包不含 Tunnel 运行时。执行 npm run fetch:cloudflared 后重新打包即可。'
   }
 
   if (Test-Path $zip) { Remove-Item $zip -Force }

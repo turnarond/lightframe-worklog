@@ -55,7 +55,9 @@ test('账号体系已移除、同步码区就位', function () {
 
 test('Windows 离线部署包脚本带 UTF-8 BOM（PowerShell 5.1 兼容）', function () {
   ['deploy/windows/install.ps1', 'deploy/windows/uninstall.ps1',
-    'tools/pack-sync-server.ps1', 'tools/deploy-ssh.ps1'].forEach(function (p) {
+    'deploy/windows/enable-tunnel.ps1', 'deploy/windows/disable-tunnel.ps1',
+    'tools/pack-sync-server.ps1', 'tools/deploy-ssh.ps1',
+    'tools/fetch-cloudflared.ps1'].forEach(function (p) {
     const full = path.join(ROOT, p);
     if (!fs.existsSync(full)) throw new Error('部署包文件缺失: ' + p);
     const buf = fs.readFileSync(full);

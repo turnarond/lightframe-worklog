@@ -142,6 +142,7 @@
 
 - `npm run pack:sync` → `dist/lightframe-sync-server.zip`，含 `server-lite/server.js`、`src/syncCode.js`、`runtime/node.exe`（自带运行时，目标机无需装 Node）、`install.ps1`、`uninstall.ps1` 与中文 `deploy/windows/README.md`；`-NoBundleNode` 可生成纯文本小包。
 - **SSH 自动部署**：本机生成专用 ed25519 密钥（私钥在 `%USERPROFILE%\.ssh\`，不入库），公钥由用户一次性加入目标机 `C:\ProgramData\ssh\administrators_authorized_keys` 并重启 `sshd`；此后 `npm run deploy:ssh -- -Target <IP>` 用 `BatchMode=yes` 密钥认证完成 scp 上传 → 远端解压安装 → 目标机自检 → 开发机跨机 health 验证。部署后可从授权文件删掉该行撤销权限。
+- **外网访问（H3 已选并落地）**：`npm run fetch:cloudflared` 预下载二进制（不入库），`pack:sync` 把 `cloudflared.exe` 与 `enable-tunnel.ps1` / `disable-tunnel.ps1` 打进包。Quick 模式零账号零域名、立即得到 `https://*.trycloudflare.com`，但**域名每次重启会变**，只适合验证/临时；Named 模式需域名托管到 Cloudflare 且交互式 `cloudflared tunnel login` 一次，产出固定 HTTPS 域名用于长期同步。`npm run deploy:ssh -- -EnableTunnel` 可一键启用 Quick 并回显地址。两者都不需要公网 IP、端口映射或备案。
 - `install.ps1`：定位/安装 Node LTS → 建 `%ProgramData%\lightframe-sync\data` 并收紧 ACL → 生成 `start.cmd` 带 `PORT`/`DATA_DIR` → 放行入站 TCP 8080 但**仅 Private/Domain** → 注册计划任务 `LightframeSync`（SYSTEM、开机自启、崩溃重启）→ health 自检。
 - Windows PowerShell 5.1 按 ANSI 读取无 BOM 的 `.ps1`，中文会乱码导致语法错乱；三个脚本统一写成 **UTF-8 with BOM**，打包时再强制转换一次，并有 `cleanup.test.js` 护栏防回归。
 - 已解压实测：包内 `require` 路径正确、服务可起、`health.ok=true`、push/pull 正常。
@@ -181,7 +182,7 @@
 
 ## 14. 待定项
 
-1. **HTTPS 方案选 H1 / H2 / H3**（唯一阻塞部署的决策，不阻塞 1~3 阶段开发）。
+1. ~~HTTPS 方案选 H1 / H2 / H3~~ → **已定 H3（Cloudflare Tunnel）并落地**（见 §9）。剩余决策只有「长期外网同步是否走 Named 模式」——若需要，用户需准备一个托管到 Cloudflare 的域名并交互式登录一次。
 2. 是否需要在 UI 提供「导出同步码到文件」（防丢失），还是仅显示 + 复制。
 3. 同步码明文存 `settings.json` 是否本期就迁到 `safeStorage`（建议列入下一版）。
 4. 单空间记录上限与保留策略（墓碑 GC）是否本期实现。

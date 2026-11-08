@@ -19,7 +19,8 @@ param(
   [int]$SshPort = 22,
   [int]$Port = 8080,
   [string]$Key = "$env:USERPROFILE\.ssh\lightframe_deploy_ed25519",
-  [switch]$UploadOnly
+  [switch]$UploadOnly,
+  [switch]$EnableTunnel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -90,8 +91,13 @@ Expand-Archive -Path $zip -DestinationPath $dst -Force
 & (Join-Path $dst 'install.ps1') -Port __PORT__
 $h = Invoke-RestMethod "http://127.0.0.1:__PORT__/api/health" -TimeoutSec 5
 Write-Host "REMOTE_HEALTH_OK service=$($h.service)"
+$tunnelMode = '__TUNNEL_MODE__'
+if ($tunnelMode -eq 'Quick') {
+  & (Join-Path $dst 'enable-tunnel.ps1') -Mode Quick -Port __PORT__
+}
 '@
 $remoteScript = $remoteScript.Replace('__PORT__', [string]$Port)
+$remoteScript = $remoteScript.Replace('__TUNNEL_MODE__', $(if ($EnableTunnel) { 'Quick' } else { '' }))
 
 Write-Host '--- 远端安装 ---'
 $ErrorActionPreference = 'Continue'
@@ -117,6 +123,11 @@ try {
   Write-Warning '常见原因：目标机网络位置为「公用」（防火墙规则仅放行 专用/域），或中间设备隔离了客户端。'
 }
 
+$tunnelMatch = [regex]::Match($output, 'TUNNEL_URL=(https://\S+)')
 Write-Host ''
-Write-Host ('客户端「服务器地址」填：http://{0}:{1}' -f $Target, $Port) -ForegroundColor Green
+Write-Host ('局域网「服务器地址」：http://{0}:{1}' -f $Target, $Port) -ForegroundColor Green
+if ($tunnelMatch.Success) {
+  Write-Host ("外网「服务器地址」：{0}" -f $tunnelMatch.Groups[1].Value) -ForegroundColor Green
+  Write-Host '提醒：Quick Tunnel 域名每次重启会变，长期使用请改用 -Mode Named 稳定域名。' -ForegroundColor Yellow
+}
 Write-Host '然后在设置 → 多设备同步里生成/填入同步码即可。'

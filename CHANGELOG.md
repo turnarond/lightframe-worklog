@@ -12,6 +12,7 @@
 - 服务端单测、双设备端到端联调与打包版烟测断言。
 - **Windows 内网离线部署包**：`npm run pack:sync` → `dist/lightframe-sync-server.zip`，含 `install.ps1`（Node 检测、数据目录权限、计划任务开机自启/崩溃重启、防火墙仅 Private/Domain）、`uninstall.ps1` 与中文 `deploy/windows/README.md`；已解压实测 health + push/pull 可用。
 - **SSH 自动部署**：`npm run deploy:ssh -- -Target <IP>`，用专用 ed25519 密钥（`BatchMode=yes`，不经手明文口令）完成 scp 上传、远端解压安装、目标机自检与跨机 health 验证；部署包默认自带 `runtime/node.exe`，目标机无需预装 Node 或调用 winget。
+- **外网访问（Cloudflare Tunnel / H3）**：`npm run fetch:cloudflared` 预下载二进制（不入库），`pack:sync` 把 `cloudflared.exe` + `enable-tunnel.ps1` / `disable-tunnel.ps1` 打进包；Quick 模式零配置拿临时 HTTPS 域名（重启会变），Named 模式支持固定域名；`deploy:ssh -EnableTunnel` 一键启用并回显地址。
 
 ### Changed
 - `src/sync.js` 的 pull/push 网络失败由静默 `continue` 改为 `onError` 上报。
