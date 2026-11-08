@@ -27,6 +27,9 @@ function Assert-Admin {
 }
 
 function Resolve-NodeExe {
+  # 部署包自带运行时优先，目标机无需预装 Node（尤其适合通过 SSH 非交互安装）
+  $bundled = Join-Path $PSScriptRoot 'runtime\node.exe'
+  if (Test-Path $bundled) { return $bundled }
   $cmd = Get-Command node.exe -ErrorAction SilentlyContinue
   if ($cmd) { return $cmd.Source }
   foreach ($p in @(
@@ -91,6 +94,11 @@ if (-not $SkipFirewall) {
       -LocalPort $Port -Action Allow -Profile Private,Domain | Out-Null
     Write-Host "已放行入站 TCP $Port（仅 Private/Domain）"
   }
+}
+
+$netProfile = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($netProfile -and $netProfile.NetworkCategory -eq 'Public') {
+  Write-Warning '当前网络位置是「公用」：防火墙规则只放行 专用/域，其它设备可能连不上。请在 Windows 设置里把该网络改为「专用」，或自行放行 Public 配置文件。'
 }
 
 # 5) 计划任务：SYSTEM 身份、开机启动、崩溃自动重启

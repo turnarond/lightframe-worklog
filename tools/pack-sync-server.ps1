@@ -1,5 +1,7 @@
 ﻿# 把同步码服务端组装成可拷贝的 Windows 离线部署包
 # 用法：npm run pack:sync  →  dist/lightframe-sync-server.zip
+# 默认把本机 node.exe 一起打进包（目标机无需安装 Node）；-NoBundleNode 可生成纯文本小包。
+param([switch]$NoBundleNode)
 $ErrorActionPreference = 'Stop'
 
 $repo = Split-Path -Parent $PSScriptRoot
@@ -35,6 +37,14 @@ try {
     $ps1 = Join-Path $stage $name
     $text = [IO.File]::ReadAllText($ps1, [Text.Encoding]::UTF8)
     [IO.File]::WriteAllText($ps1, $text, (New-Object Text.UTF8Encoding($true)))
+  }
+
+  # 自带 node.exe，目标机零前置（避免通过 SSH 非交互调用 winget 安装失败）
+  if (-not $NoBundleNode) {
+    $nodeExe = (Get-Command node.exe -ErrorAction Stop).Source
+    New-Item -ItemType Directory -Force -Path (Join-Path $stage 'runtime') | Out-Null
+    Copy-Item $nodeExe (Join-Path $stage 'runtime\node.exe')
+    Write-Host ("已打包 Node 运行时: {0} ({1} MB)" -f $nodeExe, [math]::Round((Get-Item $nodeExe).Length / 1MB, 1))
   }
 
   if (Test-Path $zip) { Remove-Item $zip -Force }

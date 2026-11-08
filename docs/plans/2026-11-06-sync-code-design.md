@@ -138,9 +138,10 @@
 | H2 自签证书 + Electron 校验证书指纹 | 0 | 需加 `certificate-error` 处理并内置指纹 | 换证书要重发客户端 |
 | H3 自有域名（约 ¥10~60/年）+ Cloudflare Tunnel | 小额年费 | 无 | 最稳：隐藏源站 IP、CF 代管证书、不用备案 |
 
-**部署目标（2026-11-08 更新）**：用户选定**局域网内一台常开的 Windows 机器**（`192.168.31.32`）而非公网 ECS。只读探测：主机在线，WinRM 5985/5986 与 SSH 22 均关闭，SMB 445 / RDP 3389 开放，8080 空闲。**没有可用的命令行远程执行通道**，因此采用「离线部署包 + 目标机本地安装」，全程无需把 Administrator 口令交给助手：
+**部署目标（2026-11-08 更新）**：用户选定**局域网内一台常开的 Windows 机器**（`192.168.31.32`）而非公网 ECS。首次只读探测：主机在线，WinRM 5985/5986 与 SSH 22 均关闭，SMB 445 / RDP 3389 开放，8080 空闲 → 采用「离线部署包 + 目标机本地安装」。随后用户在目标机开启 SSH，二次探测 `22 OPEN`、banner `SSH-2.0-OpenSSH_for_Windows_9.5` → 增加 `npm run deploy:ssh` 自动部署路径。**两条路径都不经手明文口令**（OpenSSH 客户端无法非交互传密码，写进命令会留在历史/进程命令行）：
 
-- `npm run pack:sync` → `dist/lightframe-sync-server.zip`，含 `server-lite/server.js`、`src/syncCode.js`、`install.ps1`、`uninstall.ps1` 与中文 `deploy/windows/README.md`。
+- `npm run pack:sync` → `dist/lightframe-sync-server.zip`，含 `server-lite/server.js`、`src/syncCode.js`、`runtime/node.exe`（自带运行时，目标机无需装 Node）、`install.ps1`、`uninstall.ps1` 与中文 `deploy/windows/README.md`；`-NoBundleNode` 可生成纯文本小包。
+- **SSH 自动部署**：本机生成专用 ed25519 密钥（私钥在 `%USERPROFILE%\.ssh\`，不入库），公钥由用户一次性加入目标机 `C:\ProgramData\ssh\administrators_authorized_keys` 并重启 `sshd`；此后 `npm run deploy:ssh -- -Target <IP>` 用 `BatchMode=yes` 密钥认证完成 scp 上传 → 远端解压安装 → 目标机自检 → 开发机跨机 health 验证。部署后可从授权文件删掉该行撤销权限。
 - `install.ps1`：定位/安装 Node LTS → 建 `%ProgramData%\lightframe-sync\data` 并收紧 ACL → 生成 `start.cmd` 带 `PORT`/`DATA_DIR` → 放行入站 TCP 8080 但**仅 Private/Domain** → 注册计划任务 `LightframeSync`（SYSTEM、开机自启、崩溃重启）→ health 自检。
 - Windows PowerShell 5.1 按 ANSI 读取无 BOM 的 `.ps1`，中文会乱码导致语法错乱；三个脚本统一写成 **UTF-8 with BOM**，打包时再强制转换一次，并有 `cleanup.test.js` 护栏防回归。
 - 已解压实测：包内 `require` 路径正确、服务可起、`health.ok=true`、push/pull 正常。

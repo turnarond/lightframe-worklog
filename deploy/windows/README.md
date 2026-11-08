@@ -8,7 +8,53 @@
 - 这台机器需要**常开且不休眠**（计划任务会在开机时自启，但睡眠期间不服务）。
 - 默认走明文 HTTP。同步码等价于完整数据访问权，因此**不建议把 8080 映射到公网**，也不建议在不可信网络（公共 Wi-Fi）里用。
 
-## 安装（3 步，全程不需要把口令交给任何人）
+## 部署方式
+
+| 方式 | 适用 | 说明 |
+|---|---|---|
+| **A · SSH 自动部署**（推荐） | 目标机 22 端口可达 | 开发机跑 `npm run pack:sync` + `npm run deploy:ssh -- -Target <IP>` 一条完成 |
+| B · 手动拷贝安装 | 无远程通道 | 按下方「安装（3 步）」操作 |
+
+### A · SSH 自动部署
+
+**认证只用专用部署密钥，不使用口令。** OpenSSH 客户端无法非交互传密码，把口令拼进命令会留在 PowerShell 历史与进程命令行里，因此不走密码认证。
+
+1. 开发机生成密钥（私钥在 `%USERPROFILE%\.ssh\lightframe_deploy_ed25519`，**不要提交到仓库**），读取公钥：
+
+   ```powershell
+   Get-Content "$env:USERPROFILE\.ssh\lightframe_deploy_ed25519.pub"
+   ```
+
+2. 在**目标机**用管理员 PowerShell 把公钥加入管理员授权文件。注意 Windows OpenSSH 对管理员账户读的是 `C:\ProgramData\ssh\administrators_authorized_keys`，**不是**用户目录下的 `.ssh\authorized_keys`：
+
+   ```powershell
+   $pub = '<粘贴公钥>'
+   $dir = "$env:ProgramData\ssh"
+   New-Item -ItemType Directory -Force -Path $dir | Out-Null
+   $f = Join-Path $dir 'administrators_authorized_keys'
+   Add-Content -Path $f -Value $pub
+   icacls $f /inheritance:r /grant "SYSTEM:F" /grant "*S-1-5-32-544:F"
+   Restart-Service sshd
+   ```
+
+   同时确认 `C:\ProgramData\ssh\sshd_config` 里 `PubkeyAuthentication yes`，且末尾 `Match Group administrators` 段的 `AuthorizedKeysFile` 指向 `__PROGRAMDATA__/ssh/administrators_authorized_keys`（默认如此）。
+
+3. 回到开发机执行：
+
+   ```powershell
+   npm run pack:sync
+   npm run deploy:ssh -- -Target 192.168.31.32
+   ```
+
+   脚本流程：SSH 认证探测（`BatchMode=yes`，绝不提示密码）→ `scp` 上传 zip → 远端解压并以管理员运行 `install.ps1` → 目标机本机 health 自检 → **从开发机跨机访问** `http://<IP>:8080/api/health` 验证防火墙确实放行。末尾输出客户端要填的 `serverUrl`。
+
+   可选参数：`-User`、`-SshPort 22`、`-Port 8080`、`-Key <私钥路径>`、`-UploadOnly`（只传包不安装，便于分步排查）。
+
+4. 部署完成后可删除 `administrators_authorized_keys` 里那一行撤销授权，私钥也可删除。以后要更新，重新放公钥再跑一次即可。
+
+> 若远端报「SSH 会话未获得管理员令牌」，说明 OpenSSH 未给该会话提升权限；此时用 RDP 登录目标机，手动执行一次 `install.ps1` 即可（只需一次）。
+
+### B · 手动拷贝安装（3 步，全程不需要把口令交给任何人）
 
 1. 把 `lightframe-sync-server.zip` 拷到目标机（SMB 共享 / 远程桌面 / U 盘均可），**完整解压**到一个固定目录，例如 `C:\lightframe-sync`。目录结构应如下：
 
@@ -19,6 +65,7 @@
      README.md
      server-lite\server.js
      src\syncCode.js
+     runtime\node.exe        # 自带运行时，目标机无需安装 Node
    ```
 
 2. 在目标机上以**管理员身份**打开 PowerShell，执行：
@@ -28,7 +75,7 @@
    powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
    ```
 
-   脚本会：检查/自动安装 Node.js LTS → 创建 `C:\ProgramData\lightframe-sync\data` 并收紧权限 → 生成 `start.cmd` → 放行入站 TCP 8080（仅 Private/Domain 网络）→ 注册计划任务 `LightframeSync`（SYSTEM 身份、开机自启、崩溃自动重启）→ 做一次健康检查。
+   脚本会：优先使用包内 `runtime\node.exe`（目标机**无需预装 Node**，也避免非交互调用 winget 失败）→ 创建 `C:\ProgramData\lightframe-sync\data` 并收紧权限 → 生成 `start.cmd` → 放行入站 TCP 8080（仅 Private/Domain 网络）→ 注册计划任务 `LightframeSync`（SYSTEM 身份、开机自启、崩溃自动重启）→ 做一次健康检查。若网络位置是「公用」会给出警告（那种情况下其它设备可能连不上）。
 
 3. 看到「安装完成」后，记下输出的 `客户端填 : http://192.168.31.32:8080`。
 

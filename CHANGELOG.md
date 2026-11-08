@@ -11,6 +11,7 @@
 - 启动 `syncNow()` + 30s 周期同步 + 在线判断；同步失败不再静默，界面显示原因与最近成功时间。
 - 服务端单测、双设备端到端联调与打包版烟测断言。
 - **Windows 内网离线部署包**：`npm run pack:sync` → `dist/lightframe-sync-server.zip`，含 `install.ps1`（Node 检测、数据目录权限、计划任务开机自启/崩溃重启、防火墙仅 Private/Domain）、`uninstall.ps1` 与中文 `deploy/windows/README.md`；已解压实测 health + push/pull 可用。
+- **SSH 自动部署**：`npm run deploy:ssh -- -Target <IP>`，用专用 ed25519 密钥（`BatchMode=yes`，不经手明文口令）完成 scp 上传、远端解压安装、目标机自检与跨机 health 验证；部署包默认自带 `runtime/node.exe`，目标机无需预装 Node 或调用 winget。
 
 ### Changed
 - `src/sync.js` 的 pull/push 网络失败由静默 `continue` 改为 `onError` 上报。
