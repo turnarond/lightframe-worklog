@@ -130,7 +130,7 @@
 
 ## 9. HTTPS 与部署（待定，见 §14）
 
-登录凭据虽已简化为同步码，但它等价于完整数据访问权，**不允许明文 HTTP 传输**。三个候选：
+同步码等价于完整数据访问权，**公网 / 不可信网络不允许明文 HTTP 传输**；可信局域网内可暂用 HTTP（见下方部署形态），但外网访问必须先解决 HTTPS。三个候选：
 
 | 方案 | 现金成本 | 客户端改动 | 风险 |
 |---|---|---|---|
@@ -138,7 +138,14 @@
 | H2 自签证书 + Electron 校验证书指纹 | 0 | 需加 `certificate-error` 处理并内置指纹 | 换证书要重发客户端 |
 | H3 自有域名（约 ¥10~60/年）+ Cloudflare Tunnel | 小额年费 | 无 | 最稳：隐藏源站 IP、CF 代管证书、不用备案 |
 
-部署形态：`systemd` unit 直跑 `node server-lite/server.js`，环境变量仅 `PORT` / `DATA_DIR` / `MAX_BODY`；数据目录每日 `cp` 一份保留 7 天；防火墙只放行隧道/必要端口。
+**部署目标（2026-11-08 更新）**：用户选定**局域网内一台常开的 Windows 机器**（`192.168.31.32`）而非公网 ECS。只读探测：主机在线，WinRM 5985/5986 与 SSH 22 均关闭，SMB 445 / RDP 3389 开放，8080 空闲。**没有可用的命令行远程执行通道**，因此采用「离线部署包 + 目标机本地安装」，全程无需把 Administrator 口令交给助手：
+
+- `npm run pack:sync` → `dist/lightframe-sync-server.zip`，含 `server-lite/server.js`、`src/syncCode.js`、`install.ps1`、`uninstall.ps1` 与中文 `deploy/windows/README.md`。
+- `install.ps1`：定位/安装 Node LTS → 建 `%ProgramData%\lightframe-sync\data` 并收紧 ACL → 生成 `start.cmd` 带 `PORT`/`DATA_DIR` → 放行入站 TCP 8080 但**仅 Private/Domain** → 注册计划任务 `LightframeSync`（SYSTEM、开机自启、崩溃重启）→ health 自检。
+- Windows PowerShell 5.1 按 ANSI 读取无 BOM 的 `.ps1`，中文会乱码导致语法错乱；三个脚本统一写成 **UTF-8 with BOM**，打包时再强制转换一次，并有 `cleanup.test.js` 护栏防回归。
+- 已解压实测：包内 `require` 路径正确、服务可起、`health.ok=true`、push/pull 正常。
+- **内网限制**：`192.168.31.32` 只有同网段设备可达；外网同步需 H3（Cloudflare Tunnel，不用公网 IP / 端口映射 / 备案），且必须启用 HTTPS。
+- 原 Linux ECS 的 `systemd` 方案保留在 `server-lite/README.md` 作备选；数据目录每日压缩保留 7 天。
 
 ## 10. 迁移与兼容
 
@@ -159,14 +166,14 @@
 1. ✅ 服务端 `server-lite/` + 单测 + 本地 HTTP 契约验收（13 项）
 2. ✅ 客户端改造 + 单测（144 项）+ 打包烟测（36 项）
 3. ✅ 双实例端到端联调（双向同步 / LWW 冲突 / 离线补传 / 空间隔离）
-4. ⏸ HTTPS 方案落地（待 §14 决策）；部署文档已写 `server-lite/README.md`，备份脚本随部署落地
+4. ⏸ HTTPS 方案落地（待 §14 决策）；**Windows 内网离线部署包已完成并解压实测**（`npm run pack:sync` → zip，含计划任务 / 防火墙 / 备份 / 卸载），说明见 `deploy/windows/README.md`
 5. ✅ 文档口径修正（`README` / `CHANGELOG`）；bump 版本与正式发版待首次部署后执行
 
 ## 13. 成本
 
 | 项 | 成本 |
 |---|---|
-| ECS（已有 47.92.110.53） | 0 增量 |
+| 服务器（改用已有的内网 Windows 机器 `192.168.31.32`；原 ECS 闲置） | 0 增量 |
 | 后端运行（Node 单进程 ~30MB、JSON 文件 < 1MB） | 0 增量 |
 | 数据库 / 容器 / 第三方 BaaS | 0（均不使用） |
 | HTTPS | 0（H1/H2）或约 ¥10~60/年（H3 域名） |
@@ -177,8 +184,10 @@
 2. 是否需要在 UI 提供「导出同步码到文件」（防丢失），还是仅显示 + 复制。
 3. 同步码明文存 `settings.json` 是否本期就迁到 `safeStorage`（建议列入下一版）。
 4. 单空间记录上限与保留策略（墓碑 GC）是否本期实现。
+5. **部署目标已变更为内网 Windows 机器**（原 ECS 47.92.110.53 暂不使用）；需确认是否要求「外网也能同步」——若需要，H3（Cloudflare Tunnel）由可选变为必选，且必须先定 HTTPS。
 
 ## 15. 安全提醒
 
 - 用户曾在对话中明文提供 ECS root 口令，应尽快轮换；后续改用 SSH key、禁用 root 密码登录、防火墙只放行必要端口。
+- 内网 Windows 机器同时开放 445 / 3389 且曾使用弱口令，建议尽快改强口令并限制来源网段；部署包与脚本**不含任何凭据**，安装无需交互式输入口令。
 - 凭据不写入代码、仓库、日志或设计文档；部署时通过交互式输入或环境变量注入。

@@ -10,6 +10,7 @@
 - 设置页「多设备同步」区：服务器地址、同步码、启用 / 生成 / 复制 / 退出；移除邮箱密码账号体系。
 - 启动 `syncNow()` + 30s 周期同步 + 在线判断；同步失败不再静默，界面显示原因与最近成功时间。
 - 服务端单测、双设备端到端联调与打包版烟测断言。
+- **Windows 内网离线部署包**：`npm run pack:sync` → `dist/lightframe-sync-server.zip`，含 `install.ps1`（Node 检测、数据目录权限、计划任务开机自启/崩溃重启、防火墙仅 Private/Domain）、`uninstall.ps1` 与中文 `deploy/windows/README.md`；已解压实测 health + push/pull 可用。
 
 ### Changed
 - `src/sync.js` 的 pull/push 网络失败由静默 `continue` 改为 `onError` 上报。

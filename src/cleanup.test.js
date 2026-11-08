@@ -53,6 +53,20 @@ test('账号体系已移除、同步码区就位', function () {
   if (!fs.existsSync(path.join(ROOT, 'server-lite/server.js'))) throw new Error('极简服务端缺失');
 });
 
+test('Windows 离线部署包脚本带 UTF-8 BOM（PowerShell 5.1 兼容）', function () {
+  ['deploy/windows/install.ps1', 'deploy/windows/uninstall.ps1', 'tools/pack-sync-server.ps1'].forEach(function (p) {
+    const full = path.join(ROOT, p);
+    if (!fs.existsSync(full)) throw new Error('部署包文件缺失: ' + p);
+    const buf = fs.readFileSync(full);
+    if (!(buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF)) {
+      throw new Error(p + ' 缺少 UTF-8 BOM，Windows PowerShell 5.1 会误解码中文导致语法错乱');
+    }
+  });
+  if (!fs.existsSync(path.join(ROOT, 'deploy/windows/README.md'))) {
+    throw new Error('部署包缺少中文说明');
+  }
+});
+
 test('规划文档已同步当前形态', function () {
   const doc = read('docs/plans/2026-11-03-next-steps-design.md');
   if (doc.indexOf('含 widget 透明度/穿透/位置') >= 0) throw new Error('文档仍把穿透写成在售设置');

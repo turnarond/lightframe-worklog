@@ -4,6 +4,8 @@
 
 设计依据：`docs/plans/2026-11-06-sync-code-design.md`。
 
+> **部署到内网 Windows 机器**：优先用 `npm run pack:sync` 产出的 `dist/lightframe-sync-server.zip`（自包含、零 npm 依赖），完整步骤见 `deploy/windows/README.md`（计划任务 / 防火墙 / 备份 / 卸载）。本文下方的 `systemd` 方案适用于 Linux ECS。
+
 ## 本地启动
 
 ```bash
