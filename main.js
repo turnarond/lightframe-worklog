@@ -73,6 +73,7 @@ let reminderTimer = null;
 let syncTimer = null;
 let stores = null;
 let syncBridge = null;
+let syncMetaStore = null;
 
 let settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 let tasksCache = [];
@@ -456,14 +457,32 @@ function registerIpc() {
   });
 
   // ---------- 多设备同步（同步码） ----------
+  async function updateLastSyncAt(ts) {
+    if (!syncMetaStore) return;
+    try {
+      const m = await syncMetaStore.load();
+      m.lastSyncAt = ts;
+      await syncMetaStore.save(m);
+    } catch (e) { /* 忽略持久化失败 */ }
+  }
+
   async function runSync() {
     if (!syncBridge || !settings.syncCode || !settings.serverUrl) return;
+    // 离线：不静默清空状态，显式告知并附带待推送条数
+    if (typeof net.isOnline === 'function' && !net.isOnline()) {
+      let pending = 0;
+      try { pending = await syncBridge.pendingCount(); } catch (e) { /* 忽略 */ }
+      sendToMain('sync:status', { state: 'offline', pending: pending });
+      return;
+    }
+    sendToMain('sync:status', { state: 'syncing' });
     try {
-      if (typeof net.isOnline === 'function' && !net.isOnline()) return;
       await syncBridge.syncNow();
-      sendToMain('sync:status', { ok: true });
+      const ts = Date.now();
+      await updateLastSyncAt(ts);
+      sendToMain('sync:status', { state: 'synced', lastSyncAt: ts, pending: 0 });
     } catch (err) {
-      sendToMain('sync:status', { ok: false, error: (err && err.message) || '同步失败' });
+      sendToMain('sync:status', { state: 'error', error: (err && err.message) || '同步失败' });
     }
   }
 
@@ -488,6 +507,11 @@ function registerIpc() {
     await persistSettings();
     if (syncBridge) syncBridge.setAuth('', null);
     sendToMain('sync:status', { ok: true });
+    return { ok: true };
+  });
+
+  ipcMain.handle('sync:now', async function () {
+    await runSync();
     return { ok: true };
   });
 
@@ -607,12 +631,14 @@ async function bootstrap() {
   };
 
   // v3.0：本地 store 不变，新增 SyncEngine 桥接；登录后置 baseUrl/token 才会真正推送
+  syncMetaStore = createSyncMetaStore(path.join(userData, 'syncmeta.json'));
   syncBridge = createSyncBridge({
     tasksStore: stores.tasks,
     logsStore: stores.logs,
     settingsStore: stores.settings,
-    syncMetaStore: createSyncMetaStore(path.join(userData, 'syncmeta.json')),
-    onError: function (msg) { sendToMain('sync:status', { ok: false, error: msg }); }
+    syncMetaStore: syncMetaStore,
+    onError: function (msg) { sendToMain('sync:status', { state: 'error', error: msg }); },
+    onConflict: function (info) { sendToMain('sync:conflict', info); }
   });
 
   try {
@@ -645,6 +671,17 @@ async function bootstrap() {
 
   registerIpc();
   createMainWindow();
+  // 渲染层订阅 sync:status 后再推送「上次同步时间」，避免事件在订阅前发出被丢弃
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.once('did-finish-load', function () {
+      if (!syncMetaStore) return;
+      syncMetaStore.load().then(function (m) {
+        if (m && m.lastSyncAt) {
+          sendToMain('sync:status', { state: 'synced', lastSyncAt: m.lastSyncAt, restored: true });
+        }
+      }).catch(function () {});
+    });
+  }
   createTray();
   applyAllSettings();
 

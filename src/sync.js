@@ -76,6 +76,26 @@ function fromWire(change) {
   return out;
 }
 
+// 冲突判定只比较「语义字段」，避免 updatedAt/_storedAt 等元数据差异造成误报
+const CONFLICT_FIELDS = {
+  tasks: ['title', 'details', 'priority', 'done', 'deletedAt'],
+  daily_logs: ['progress', 'issues', 'plan'],
+  prefs: ['value']
+};
+
+function conflictFieldsDiffer(type, a, b) {
+  const fields = CONFLICT_FIELDS[type];
+  if (!fields) return false;
+  return fields.some(function (k) { return JSON.stringify(a[k]) !== JSON.stringify(b[k]); });
+}
+
+function conflictTitle(type, row) {
+  if (type === 'tasks') return row && row.title ? String(row.title) : '任务';
+  if (type === 'daily_logs') return row && row.date ? String(row.date) : '日报';
+  if (type === 'prefs') return row && row.key ? String(row.key) : '偏好';
+  return '条目';
+}
+
 const TYPES = ['tasks', 'daily_logs', 'prefs'];
 
 /**
@@ -100,6 +120,7 @@ class SyncEngine {
     this.setMeta = opts.setMeta;
     // 默认使用浏览器/Node 原生 fetch；测试可注入假实现
     this.onError = opts.onError || function () {};
+    this.onConflict = opts.onConflict || function () {};
     this.fetchImpl = opts.fetchImpl || function (method, url, body) {
       return fetch(url, {
         method: method,
@@ -168,8 +189,24 @@ class SyncEngine {
       const changes = (res.json && res.json.changes) || [];
       const remoteRows = changes.filter(c => c.type === type).map(fromWire);
       const local = await this.getLocal(type);
+      // 冲突检测：先快照「本次 pull 前尚未确认推送的本地改动」（updatedAt > pushCursor）
+      const pre = dirtyDiff(local, meta[type].pushCursor || 0);
       const merged = applyPull(local, remoteRows);
       await this.putLocal(type, merged);
+      if (this.onConflict) {
+        for (let i = 0; i < pre.length; i++) {
+          const p = pre[i];
+          const k = rowKey(p);
+          if (!k) continue;
+          const after = merged.find(function (r) { return rowKey(r) === k; });
+          // 服务端较新版本覆盖/删除了我方未确认改动 → 视为冲突
+          if (!after || conflictFieldsDiffer(type, p, after)) {
+            try {
+              this.onConflict({ type: type, key: k, title: conflictTitle(type, p) });
+            } catch (e) { /* 忽略回调异常，不阻断同步主流程 */ }
+          }
+        }
+      }
       let pulledMax = 0;
       remoteRows.forEach(function (r) {
         const u = toMs(r.updatedAt);
@@ -207,6 +244,17 @@ class SyncEngine {
       meta[type].pushCursor = serverTime;
     }
     await this.setMeta(meta);
+  }
+
+  /** 未确认推送的本地改动条数（updatedAt > pushCursor 的行之和），用于「待推送 N 条」提示 */
+  async pendingCount() {
+    const meta = await this.getMeta();
+    let n = 0;
+    for (const type of TYPES) {
+      const rows = await this.getLocal(type);
+      n += dirtyDiff(rows, (meta[type] && meta[type].pushCursor) || 0).length;
+    }
+    return n;
   }
 }
 

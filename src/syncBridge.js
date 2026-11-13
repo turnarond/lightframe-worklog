@@ -77,7 +77,8 @@ function createSyncBridge(opts) {
     setMeta: setMeta,
     fetchImpl: opts.fetchImpl,
     debounceMs: opts.debounceMs,
-    onError: opts.onError
+    onError: opts.onError,
+    onConflict: opts.onConflict
   });
 
   // 记录当前同步偏好键的改动时间戳（仅当用户真实改了偏好时）
@@ -132,6 +133,7 @@ function createSyncBridge(opts) {
     setAuth: setAuth,
     seedIfFirstSync: seedIfFirstSync,
     syncNow: function () { return engine.syncNow(); },
+    pendingCount: function () { return engine.pendingCount(); },
     onOnline: function () { return engine.onOnline(); }
   };
 }

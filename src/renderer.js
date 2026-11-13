@@ -68,6 +68,8 @@
     settings: null,
     syncError: '',
     lastSyncAt: '',
+    syncState: '',        // configuring | offline | syncing | synced | error
+    syncPending: 0,       // 待推送本地改动条数
     tasks: [],
     logs: {},
     today: TM.todayString(),
@@ -143,6 +145,7 @@
   /* ============ 提示 ============ */
 
   var toastTimer = null;
+  var conflictToastCache = {};
   function showToast(message, kind, action) {
     var node = D.toast;
     if (!node) return;
@@ -1332,10 +1335,23 @@
   }
 
   // ---------- 多设备同步（同步码） ----------
+  function fmtTime(ts) {
+    if (!ts) return '';
+    try {
+      return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return String(ts);
+    }
+  }
+
   function syncStatusText() {
     if (!state.settings.syncCode || !state.settings.serverUrl) return '未配置同步';
-    if (state.syncError) return '同步失败：' + state.syncError;
-    return state.lastSyncAt ? ('已同步 · ' + state.lastSyncAt) : '已启用，等待首次同步';
+    var pendingTxt = state.syncPending > 0 ? ('（待推送 ' + state.syncPending + ' 条）') : '';
+    if (state.syncState === 'syncing') return '同步中…' + pendingTxt;
+    if (state.syncState === 'offline') return '离线' + pendingTxt;
+    if (state.syncState === 'error') return '同步失败：' + state.syncError;
+    if (state.lastSyncAt) return '已同步 · ' + fmtTime(state.lastSyncAt) + pendingTxt;
+    return '已启用，等待首次同步';
   }
 
   function renderSyncArea() {
@@ -1344,10 +1360,21 @@
     D['sync-code'].value = state.settings.syncCode
       ? SC.displaySyncCode(state.settings.syncCode) : '';
     D['sync-status'].textContent = syncStatusText();
-    D['sync-status'].className = 'set-tip' +
-      (state.syncError ? ' sync-err' : (state.lastSyncAt ? ' sync-ok' : ''));
+    var cls = 'set-tip';
+    if (state.syncState === 'error') cls += ' sync-err';
+    else if (state.syncState === 'syncing') cls += ' sync-busy';
+    else if (state.syncState === 'offline') cls += ' sync-offline';
+    else if (state.lastSyncAt) cls += ' sync-ok';
+    D['sync-status'].className = cls;
     D['sync-clear'].hidden = !state.settings.syncCode;
+    if (D['sync-now']) D['sync-now'].disabled = (state.syncState === 'syncing');
     updateSyncIndicator();
+  }
+
+  async function onManualSync() {
+    if (state.syncState === 'syncing') return;
+    showToast('正在同步…');
+    await apiCall('syncNow', null);
   }
 
   function updateSyncIndicator() {
@@ -1523,6 +1550,7 @@
     D['sync-generate'].addEventListener('click', generateSyncCode);
     D['sync-copy'].addEventListener('click', copySyncCode);
     D['sync-clear'].addEventListener('click', clearSyncCode);
+    if (D['sync-now']) D['sync-now'].addEventListener('click', onManualSync);
     D['w-prev'].addEventListener('click', function () {
       if (state.settings.widget.expanded) shiftMonth(-1); else shiftWeek(-1);
     });
@@ -1689,7 +1717,7 @@
       'app-version', 'check-update',
       'w-sync',
       'sync-block', 'sync-server', 'sync-code', 'sync-status',
-      'sync-apply', 'sync-generate', 'sync-copy', 'sync-clear'
+      'sync-apply', 'sync-generate', 'sync-copy', 'sync-clear', 'sync-now'
     ].forEach(function (id) {
       D[id] = $(id);
     });
@@ -1742,13 +1770,40 @@
     if (typeof bridge.onSyncStatus === 'function') {
       bridge.onSyncStatus(function (s) {
         if (!s) return;
-        if (s.ok) {
-          state.syncError = '';
-          state.lastSyncAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-        } else {
-          state.syncError = s.error || '同步失败';
+        if (s.state) {
+          state.syncState = s.state;
+          if (s.state === 'synced') {
+            state.syncError = '';
+            if (s.lastSyncAt) state.lastSyncAt = s.lastSyncAt;
+          } else if (s.state === 'error') {
+            state.syncError = s.error || '同步失败';
+          }
+          state.syncPending = (typeof s.pending === 'number') ? s.pending : 0;
+        } else if (typeof s.ok === 'boolean') {
+          // 兼容旧格式（理论上已不再产生）
+          if (s.ok) {
+            state.syncState = 'synced';
+            state.syncError = '';
+            if (!state.lastSyncAt) state.lastSyncAt = Date.now();
+          } else {
+            state.syncState = 'error';
+            state.syncError = s.error || '同步失败';
+          }
         }
         renderSyncArea();
+      });
+    }
+
+    // 冲突提示：纯客户端检测到的「未确认本地改动被另一台设备覆盖」
+    if (typeof bridge.onSyncConflict === 'function') {
+      bridge.onSyncConflict(function (info) {
+        if (!info) return;
+        var key = (info.type || '') + ':' + (info.key || '');
+        var now = Date.now();
+        // 同一冲突 60s 内只提示一次，避免 30s 轮询重复打扰
+        if (conflictToastCache[key] && now - conflictToastCache[key] < 60000) return;
+        conflictToastCache[key] = now;
+        showToast('「' + (info.title || '条目') + '」已被另一台设备更新', 'warn');
       });
     }
     if (typeof bridge.onRefresh === 'function') {
@@ -1834,10 +1889,12 @@
     syncQuickDate();
     renderWidget();
 
-    // 让入场动画在首屏渲染后启动
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () { document.body.classList.add('ready'); });
-    });
+    // 让入场动画在首屏渲染后启动。优先用 rAF 保证先绘制初始态；
+    // 但后台/隐藏窗口下 rAF 可能被节流，故加 setTimeout 兜底，
+    // 否则 body.ready 永不添加、首屏 .reveal 内容会停在 opacity:0。
+    function markReady() { document.body.classList.add('ready'); }
+    requestAnimationFrame(function () { requestAnimationFrame(markReady); });
+    setTimeout(markReady, 300);
 
     // 主进程若未在启动时恢复置顶状态，这里补一次（失败也不影响使用）
     if (state.settings.alwaysOnTop) apiCall('setAlwaysOnTop', null, true);

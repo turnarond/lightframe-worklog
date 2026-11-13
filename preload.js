@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('api', {
   // 多设备同步（同步码）
   syncApply: function (payload) { return ipcRenderer.invoke('sync:apply', payload); },
   syncClear: function () { return ipcRenderer.invoke('sync:clear'); },
+  syncNow: function () { return ipcRenderer.invoke('sync:now'); },
 
   // 应用动作
   copyText: function (text) { return ipcRenderer.invoke('app:copy', text); },
@@ -72,5 +73,11 @@ contextBridge.exposeInMainWorld('api', {
     const handler = function (_event, payload) { cb(payload); };
     ipcRenderer.on('sync:status', handler);
     return function () { ipcRenderer.removeListener('sync:status', handler); };
+  },
+  onSyncConflict: function (cb) {
+    if (typeof cb !== 'function') return function () {};
+    const handler = function (_event, info) { cb(info); };
+    ipcRenderer.on('sync:conflict', handler);
+    return function () { ipcRenderer.removeListener('sync:conflict', handler); };
   }
 });
