@@ -5,3 +5,6 @@ a.txt
 smoke-widget.tmp.js
 .DS_Store
 *.log
+__pycache__/
+*.pyc
+.pytest_cache/

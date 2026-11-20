@@ -1,0 +1,9 @@
+{
+  "name": "lightframe-worklog",
+  "skillVersion": "0.2.0",
+  "scriptsVersion": "0.2.0",
+  "profiles": [
+    "web"
+  ],
+  "adoptedAt": "2026-11-20"
+}
