@@ -72,7 +72,7 @@ test('Windows 离线部署包脚本带 UTF-8 BOM（PowerShell 5.1 兼容）', fu
 });
 
 test('规划文档已同步当前形态', function () {
-  const doc = read('docs/plans/2026-11-03-next-steps-design.md');
+  const doc = read('doc/03-设计/设计稿/2026-11-03-下一步规划与实施记录.md');
   if (doc.indexOf('含 widget 透明度/穿透/位置') >= 0) throw new Error('文档仍把穿透写成在售设置');
   if (doc.indexOf('实施记录') < 0) throw new Error('文档缺少实施记录章节');
   if (doc.indexOf('单一日期状态') < 0) throw new Error('文档缺少双日期合并记录');

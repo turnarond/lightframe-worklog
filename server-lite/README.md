@@ -2,7 +2,7 @@
 
 零 npm 依赖的 Node HTTP 服务，为「光影工作志」提供**可选**的多设备同步。默认不配置同步码时客户端完全离线，本服务不参与。
 
-设计依据：`docs/plans/2026-11-06-sync-code-design.md`。
+设计依据：`doc/03-设计/设计稿/2026-11-06-同步码多设备同步-设计.md`。
 
 > **部署到内网 Windows 机器**：先用 `npm run pack:sync` 产出 `dist/lightframe-sync-server.zip`（自带 `node.exe`，目标机零前置）。目标机 SSH 可达时用 `npm run deploy:ssh -- -Target <IP>` 一键部署；否则手动拷贝 zip 运行 `install.ps1`。完整步骤见 `deploy/windows/README.md`（公钥配置 / 计划任务 / 防火墙 / 备份 / 卸载）。本文下方的 `systemd` 方案适用于 Linux ECS。
 

@@ -8,15 +8,16 @@
 - **全局唤起**：`Ctrl+Shift+Space` 随时弹出速记小窗
 - **视觉**：暖纸手账（浅色纸质纹理 + 火漆红强调色）+ 玻璃拟态
 
-设计依据见 [`SPEC.md`](./SPEC.md)，实施计划见 [`PLAN.md`](./PLAN.md)，桌面挂件设计稿见 [`design/widget-design.md`](./design/widget-design.md)。
+设计依据见 [`doc/01-蓝图/产品规格-光影工作志.md`](./doc/01-蓝图/产品规格-光影工作志.md)，实施计划见 [`doc/03-设计/实施计划与迭代记录.md`](./doc/03-设计/实施计划与迭代记录.md)，桌面挂件设计稿见 [`doc/03-设计/挂件设计稿.md`](./doc/03-设计/挂件设计稿.md)。
+
+> 当前版本：**v2.8.0**（2026-11-20，含可选的同步码多设备同步）。
 
 ---
 
 ## 一、快速开始
 
 ```bash
-cd task-desktop
-npm install      # 首次需联网下载 Electron 运行时（约 180 MB）
+npm ci           # 首次需联网下载 Electron 运行时（约 180 MB）
 npm start        # 启动应用
 ```
 
@@ -24,11 +25,11 @@ npm start        # 启动应用
 
 | 命令 | 说明 |
 |---|---|
-| `npm test` | 跑核心逻辑单测（63 项，不依赖 Electron）：`node --test src/*.test.js` |
+| `npm test` | 跑单元/集成测试（151 项，不依赖 Electron）：`node --test src/*.test.js server-lite/*.test.js` |
 | `npm run icon` | 重新生成 `assets/icon.png` |
 | `npm run dist` | 打包 Windows 便携版 `exe`（输出在 `dist/`） |
 
-> 首次 `npm install` 若因网络中断导致 Electron 二进制缺失（`node_modules/electron/dist/electron.exe` 不存在），补跑一次 `node node_modules/electron/install.js` 即可。
+> 首次 `npm ci` 若因网络中断导致 Electron 二进制缺失（`node_modules/electron/dist/electron.exe` 不存在），补跑一次 `node node_modules/electron/install.js` 即可。
 
 ---
 
@@ -71,37 +72,31 @@ npm start        # 启动应用
 
 ## 三、数据存在哪
 
-三个 JSON 文件，位于 Electron `userData` 目录：
+四个 JSON 文件，位于 Electron `userData` 目录：
 
 ```
 C:\Users\<用户名>\AppData\Roaming\lightframe-worklog\
 ├── tasks.json       任务列表
 ├── dailyLogs.json   每日三栏日志（以日期 YYYY-MM-DD 为键）
-└── settings.json    分类枚举、自启/置顶/收托盘、快捷键、周计划
+├── settings.json    分类枚举、自启/置顶/收托盘、快捷键、周计划、同步码
+└── syncmeta.json    同步游标与最近同步时间（未启用同步时不存在）
 ```
 
-备份或迁移，直接拷这三个文件即可。损坏时读取层会降级为空数据而不是崩溃。
+备份或迁移，直接拷这四个文件即可（未启用同步时没有 `syncmeta.json`）。损坏时读取层会降级为空数据而不是崩溃。
 
 ---
 
 ## 四、目录结构
 
 ```
-task-desktop/
-├── main.js           主进程：窗口 / 托盘 / 自启 / 全局键 / 通知 / 提醒定时器 / IPC
-├── preload.js        contextBridge 安全桥接（不暴露 ipcRenderer）
-├── index.html        主界面结构（三 Tab）
-├── quick-add.html    全局快捷键唤起的速记小窗
-├── assets/icon.png   应用图标（由 tools/genicon.js 纯 Node 生成）
-├── tools/genicon.js  手写 PNG 编码器，无二进制依赖
-├── designs/          三套概念稿（B 暖纸为选定方案）
-└── src/
-    ├── taskModel.js      任务模型（纯函数，UMD，Node/浏览器双用）
-    ├── report.js         日报 / 周报聚合与文本格式化（UMD）
-    ├── store.js          三份 JSON 的持久化与容错（CommonJS）
-    ├── renderer.js       渲染层交互（三 Tab / 速记 / 月历 / 报告）
-    ├── styles.css        暖纸主题样式
-    └── *.test.js         51 项单元测试
+lightframe-worklog/
+├── main.js / preload.js / index.html / quick-add.html
+├── src/              核心逻辑、渲染层与 13 个测试文件（另 2 个在 server-lite/）
+├── server-lite/      同步码同步服务端（零 npm 依赖）
+├── server/           v3.0 账号制方案历史实现（仅参考，不部署）
+├── tools/            图标生成、UI 烟测、部署与局域网验证脚本
+├── assets/           图标与自托管字体
+└── doc/              中文序号文档（总览 / 蓝图 / 需求 / 设计 / 测试 / 归档）
 ```
 
 核心逻辑（`taskModel` / `report` / `store`）与界面完全解耦，可脱离 Electron 单测。
@@ -127,7 +122,7 @@ task-desktop/
 - **折叠面板**：点「▣」展开/收起原「任务 / 日报 / 周报」三 Tab（展开时窗口自动增高、按内容自适应高度）
 - 设置项落盘：`widget.opacity`（0.2–1.0，设置→外观滑块可调）、`widget.blur`、`widget.clickThrough`（👁 切换）、`widget.expanded`、上次停靠坐标
 
-> 范围说明：#1 桌面日历形态已在本版本落地（设计稿 `design/widget-design.md`）。#3 大模型日报生成仍属 Next-Version，本期未做。
+> 范围说明：#1 桌面日历形态已在本版本落地（设计稿 `doc/03-设计/挂件设计稿.md`）。#3 大模型日报生成仍属 Next-Version，本期未做。
 
 ## v1.1.0 新增（分批第一批）
 
@@ -135,13 +130,13 @@ task-desktop/
 - **顶栏实时时钟**：原「日期 / 工作日」后增加 `HH:MM` 实时时钟（每秒刷新）。
 - **创建可无截止日**：速记与详情编辑里截止日均可留空（模型本就支持，本轮明确为产品行为）。
 
-> 范围说明：本轮按战略对齐只交付上述低风险两项。#1 桌面日历形态（半透明挂件）与 #3 大模型日报生成已对齐方向、列入下一迭代，本期不做。详见 `SPEC.md` 第 11 节。
+> 范围说明：本轮按战略对齐只交付上述低风险两项。#1 桌面日历形态（半透明挂件）与 #3 大模型日报生成已对齐方向、列入下一迭代，本期不做。详见 `doc/01-蓝图/产品规格-光影工作志.md` 第 11 节。
 
 ---
 
 ## 六、已验证（本机实测）
 
-- 单元测试：`node --test src/*.test.js` → **51 / 51 通过**
+- 单元/集成测试：`npm test` → **151 / 151 通过**（2026-11-20 实测）
 - 桌面实机：窗口标题渲染正常；三个 Tab 切换与数据聚合正常
 - 完整链路：添加任务 → 勾选完成 → 日报/周报聚合与实际盖章格式 → 删除 → 落盘为空，**无 console.error 与未捕获异常**
 - 速记小窗：唤起后输入框自动聚焦、分类沿用上次、`Enter` 经 IPC 真实落盘、`Esc` 关闭
@@ -155,14 +150,13 @@ task-desktop/
 | 级别 | 问题 | 说明 / 规避 |
 |---|---|---|
 | P2 | 提醒依赖应用在运行 | 开机自启 + 托盘常驻已覆盖日常场景；整天未启动则当天提醒不再补发 |
-| P2 | 字体走 Google Fonts CDN | 离线时自动回退到 PingFang SC / 微软雅黑 / 系统等宽字体，观感略差但不影响功能 |
-| P3 | 无数据导出与备份 | 手动拷贝三份 JSON；单个文件损坏时读取层降级为空（等于丢弃该文件） |
+| P3 | 无数据导出与备份 | 手动拷贝四个 JSON；单个文件损坏时读取层降级为空（等于丢弃该文件） |
 | P3 | 便携版多开会有并发写覆盖 | 最后写入者生效，同一份数据请勿同时运行多个副本 |
 | P3 | 通知受系统通知中心控制 | 开启「专注助手/勿扰」时可能被静默 |
 
-按 SPEC 在 v2.1 阶段明确不做的：无云同步、无工时统计 / 计时器、无报告模板自定义、无文件导出、无移动端。
+按 SPEC 明确不做的：默认不联网（可选「同步码多设备同步」，需用户显式配置）、无工时统计 / 计时器、无报告模板自定义、无文件导出、无移动端。
 
-> **当前（v2.7 之后）**：已提供**可选的同步码多设备同步**——极简服务端在 `server-lite/`，默认仍是纯本地单机，不配置同步码就不会联网。设计见 `docs/plans/2026-11-06-sync-code-design.md`，部署见 `server-lite/README.md`。
+> **当前（v2.8.0）**：已提供**可选的同步码多设备同步**——极简服务端在 `server-lite/`，默认仍是纯本地单机，不配置同步码就不会联网。设计见 [`doc/03-设计/设计稿/2026-11-06-同步码多设备同步-设计.md`](./doc/03-设计/设计稿/2026-11-06-同步码多设备同步-设计.md)，部署见 `server-lite/README.md`。
 
 ---
 
