@@ -2,7 +2,13 @@
 
 语义化版本（SemVer）。每个版本记录 Added / Changed / Fixed。
 
-## [Unreleased] · 同步码多设备同步
+## [Unreleased]
+
+（暂无）
+
+## [2.8.0] - 2026-11-20 · 同步码多设备同步与部署收口
+
+> v2.6 / v2.7 为未单独发版的内部里程碑，按时间保留在下方，便于追溯。
 
 ### Added
 - **同步可信度增强**：设置页同步区显示状态机（在线/离线/同步中/已同步·时间/失败）+ 待推送条数；新增「立即同步」按钮；纯客户端冲突检测（快照未确认本地改动、拉取后比对被覆盖项）经 `onConflict` 弹出「X 已被另一台设备更新」（同冲突 60s 去重）；`lastSyncAt` 持久化到 `syncmeta.json` 重启后保留。不动服务端协议、保持 LWW。
@@ -22,9 +28,37 @@
 - `src/sync.js` 的 pull/push 网络失败由静默 `continue` 改为 `onError` 上报。
 - 服务端 pull 增量游标改用服务端接收时刻 `_storedAt`，不再混用客户端 `updatedAt` 与服务端 `server_time` 两个时钟域。
 - 删除 `src/authClient.js` 及 5 个 auth IPC；`settings.account` 由 `settings.syncCode` 取代，启动时清理历史账号字段。
+- **工程治理接入**：`playbook.py adopt` 安装 marker、检查器与中文文档骨架；`AGENTS.md` 落地本地分支、版本与门禁约定。
+- **文档迁移**：SPEC / PLAN / 设计稿迁入 `doc/` 中文序号目录；账号制云同步验收矩阵移入 `doc/08-历史归档` 并标注废弃。
+- **版本三件套收口**：`package.json`、`VERSION`、`CHANGELOG.md` 对齐 2.8.0。
 
 ### Fixed
 - **首屏入场动画卡在 `opacity:0`**：`body.ready` 原仅靠双重 `requestAnimationFrame` 添加，后台/隐藏窗口下 rAF 被节流导致 `.reveal` 内容永不显示；新增 `setTimeout` 兜底，保证 `ready` 始终生效。
+- 修正 README 的 `task-desktop/` 错误路径、过期测试数与数据文件数。
+- 修正 `cleanup.test.js` 中已迁移的规划文档路径。
+
+## [2.7.0] - 2026-11-06 · Markdown 富文本（内部里程碑，未单独发版）
+
+### Added
+- 任务备注与日志支持 Markdown 渲染（markdown-it + DOMPurify 双层净化，禁用原始 HTML；链接强制 `target=_blank rel=noopener noreferrer`）。
+- 编辑区「预览 / 编辑」切换，默认源码态；任务列表显示备注首行渲染结果。
+- 前端视觉：衬线标题、火漆列表记号、链接下划线、代码块贴纸、引用左侧火漆规。
+
+### Fixed
+- `renderMarkdown` 调用补 try/catch，渲染失败降级纯文本，不拖垮 IPC 桥接。
+- 预览容器限高可滚动；预览切换复用渲染逻辑，避免重复实现。
+
+## [2.6.0] - 2026-11-06 · 本地增强包（内部里程碑，未单独发版）
+
+### Added
+- 自动更新：electron-updater + GitHub Releases（publish 指向 `turnarond/lightframe-worklog`），设置页显示版本号与「检查更新」。
+- 原子写入：store 改为 temp + rename，防止半写损坏。
+- 界面字号缩放；字体改为本地自托管，移除 Google Fonts 外链。
+- 挂件：穿透态可拖手柄、自定义日历（禁手填）、壁纸态背景区分、标题加粗、弹窗入场。
+
+### Fixed
+- 安装版启动默认穿透导致整窗不可点击；启动强制可交互并提供托盘逃生口。
+- 首屏 init 断链导致空白；写盘失败不再谎报成功；删除可撤销；设置字段不丢失。
 
 ## [2.5.1] - 2026-11-02 · 每日待办提醒合并 + 挂件壁纸态
 
