@@ -4,7 +4,8 @@
 
 ## [Unreleased]
 
-（暂无）
+### Fixed
+- **启动自动同步失效**：`runSync` / `updateLastSyncAt` 原定义在 `registerIpc()` 内，`bootstrap` 引用时抛 `ReferenceError: runSync is not defined`，导致启动补同步与 30s 周期同步从未建立。已移至模块作用域，并新增 `tools/smoke-boot.js` 启动回归烟测（`npm run smoke:boot`）。
 
 ## [2.8.0] - 2026-11-20 · 同步码多设备同步与部署收口
 

@@ -15,6 +15,7 @@
     "verify:lan": "node tools/verify-lan.js",
     "icon": "node tools/genicon.js",
     "smoke": "node tools/smoke-ui.js",
+    "smoke:boot": "node tools/smoke-boot.js",
     "dist": "electron-builder --win nsis",
     "dist:portable": "electron-builder --win portable",
     "release": "electron-builder --win nsis --publish=always"

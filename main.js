@@ -415,6 +415,36 @@ function checkReminders() {
   }
 }
 
+// ---------- 多设备同步（同步码） ----------
+async function updateLastSyncAt(ts) {
+  if (!syncMetaStore) return;
+  try {
+    const m = await syncMetaStore.load();
+    m.lastSyncAt = ts;
+    await syncMetaStore.save(m);
+  } catch (e) { /* 忽略持久化失败 */ }
+}
+
+async function runSync() {
+  if (!syncBridge || !settings.syncCode || !settings.serverUrl) return;
+  // 离线：不静默清空状态，显式告知并附带待推送条数
+  if (typeof net.isOnline === 'function' && !net.isOnline()) {
+    let pending = 0;
+    try { pending = await syncBridge.pendingCount(); } catch (e) { /* 忽略 */ }
+    sendToMain('sync:status', { state: 'offline', pending: pending });
+    return;
+  }
+  sendToMain('sync:status', { state: 'syncing' });
+  try {
+    await syncBridge.syncNow();
+    const ts = Date.now();
+    await updateLastSyncAt(ts);
+    sendToMain('sync:status', { state: 'synced', lastSyncAt: ts, pending: 0 });
+  } catch (err) {
+    sendToMain('sync:status', { state: 'error', error: (err && err.message) || '同步失败' });
+  }
+}
+
 // ---------- IPC ----------
 function registerIpc() {
   ipcMain.handle('tasks:load', function () {
@@ -455,36 +485,6 @@ function registerIpc() {
     if (syncBridge) syncBridge.markDirty('prefs');
     return settings;
   });
-
-  // ---------- 多设备同步（同步码） ----------
-  async function updateLastSyncAt(ts) {
-    if (!syncMetaStore) return;
-    try {
-      const m = await syncMetaStore.load();
-      m.lastSyncAt = ts;
-      await syncMetaStore.save(m);
-    } catch (e) { /* 忽略持久化失败 */ }
-  }
-
-  async function runSync() {
-    if (!syncBridge || !settings.syncCode || !settings.serverUrl) return;
-    // 离线：不静默清空状态，显式告知并附带待推送条数
-    if (typeof net.isOnline === 'function' && !net.isOnline()) {
-      let pending = 0;
-      try { pending = await syncBridge.pendingCount(); } catch (e) { /* 忽略 */ }
-      sendToMain('sync:status', { state: 'offline', pending: pending });
-      return;
-    }
-    sendToMain('sync:status', { state: 'syncing' });
-    try {
-      await syncBridge.syncNow();
-      const ts = Date.now();
-      await updateLastSyncAt(ts);
-      sendToMain('sync:status', { state: 'synced', lastSyncAt: ts, pending: 0 });
-    } catch (err) {
-      sendToMain('sync:status', { state: 'error', error: (err && err.message) || '同步失败' });
-    }
-  }
 
   ipcMain.handle('sync:apply', async function (_event, payload) {
     const code = SyncCode.normalizeSyncCode(payload && payload.code);
@@ -714,6 +714,10 @@ app.on('before-quit', function () {
   if (reminderTimer) {
     clearInterval(reminderTimer);
     reminderTimer = null;
+  }
+  if (syncTimer) {
+    clearInterval(syncTimer);
+    syncTimer = null;
   }
   try {
     globalShortcut.unregisterAll();

@@ -34,8 +34,9 @@
 | 门禁 | 命令 | 通过判据 |
 |---|---|---|
 | 单元/集成测试 | `npm test` | 全部通过，无失败用例 |
-| 语法检查 | `for f in main.js preload.js src/renderer.js src/*.js; do node --check "$f" \|\| exit 1; done` | 每个文件退出码 0（`node --check` 多参数只校验首参，必须逐文件跑） |
+| 语法检查 | `for f in main.js preload.js src/*.js tools/*.js server-lite/*.js; do node --check "$f" \|\| exit 1; done` | 每个文件退出码 0（`node --check` 多参数只校验首参，必须逐文件跑） |
 | 局域网同步自测 | `node tools/verify-lan.js --self-host` | 输出全项通过 |
+| 启动烟测 | `npm run smoke:boot` | 启动日志无 `[boot] 启动失败`，页面 ready |
 | UI 烟测 | `npm run smoke` | 无 console.error，断言全 PASS（需完整安装 Electron） |
 | 发布门 | `python scripts/release_gate.py <产物> --marker <标记> ...` | PASS，且旧产物不含标记 |
 | 变更卡 | `python scripts/check_change_card.py <卡> --json` | ok=true，无占位符 |
