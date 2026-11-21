@@ -41,6 +41,7 @@
 | 发布门 | `python scripts/release_gate.py <产物> --marker <标记> ...` | PASS，且旧产物不含标记 |
 | 变更卡 | `python scripts/check_change_card.py <卡> --json` | ok=true，无占位符 |
 | 评审证据 | `python scripts/check_review_evidence.py <证据> --json --require-second` | ok=true |
+| CI | GitHub Actions `.github/workflows/ci.yml` | push/PR 的 Windows 门禁全绿 |
 
 - 代码行为变更按风险选 `tdd:浅/中/深`；仅文档/版本元数据可选 `tdd:免` 并写明理由。
 - 作者自审不算第二签；独立评审优先派独立会话，通道不可用时须在证据中标注「无独立评审席」。
@@ -51,4 +52,5 @@
 - `server-lite/` 为当前同步服务端（零 npm 依赖，按同步码分空间）。
 - 已知债务：`src/renderer.js`（约 1900 行）、`src/styles.css`（约 1600 行）、`main.js`（约 720 行）
   超过手册「单文件 > 600 行 = 腐朽」阈值，重构须单独立项、先提案后实施。
-- CI 尚未接入；当前门禁依赖本地命令，后续以 `.github/workflows` 固化。
+- CI 已接入：`.github/workflows/ci.yml` 在 push / PR 运行 Windows 门禁；本地命令仍可复跑。
+- 分支保护尚未配置；建议在 GitHub 把 `Windows gates` 设为 required status check。
