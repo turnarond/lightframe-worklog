@@ -33,6 +33,23 @@ npm start        # 启动应用
 
 ---
 
+## 安装（Windows）与未签名提示
+
+从 [GitHub Releases](https://github.com/turnarond/lightframe-worklog/releases) 下载 `lightframe-worklog-setup-X.Y.Z.exe`，不要从第三方站点获取。
+
+> **当前安装包未做代码签名**，Windows SmartScreen 可能显示「未知发布者 / Unknown app」。点「更多信息」→「仍要运行」即可；这是未签名程序的系统提示，不代表安装包损坏。
+
+下载后建议校验 SHA-256（v2.9.0）：
+
+```powershell
+Get-FileHash .\lightframe-worklog-setup-2.9.0.exe -Algorithm SHA256
+# 期望：BA34C44B2AE9827364912263B689FEB3E29F92F7DAD707CA1D15FF88B1EFE883
+```
+
+哈希不匹配时不要运行。代码签名方案见 `doc/05-运维/2026-11-21-SignPath代码签名接入.md`（当前暂缓）。
+
+---
+
 ## 二、怎么用
 
 ### 1. 记任务
@@ -152,6 +169,7 @@ lightframe-worklog/
 | P2 | 提醒依赖应用在运行 | 开机自启 + 托盘常驻已覆盖日常场景；整天未启动则当天提醒不再补发 |
 | P3 | 无数据导出与备份 | 手动拷贝四个 JSON；单个文件损坏时读取层降级为空（等于丢弃该文件） |
 | P3 | 便携版多开会有并发写覆盖 | 最后写入者生效，同一份数据请勿同时运行多个副本 |
+| P2 | 安装包未签名 | SmartScreen 显示「未知发布者 / Unknown app」；按本文安装说明校验 SHA-256 后运行；SignPath 申请暂缓 |
 | P3 | 通知受系统通知中心控制 | 开启「专注助手/勿扰」时可能被静默 |
 
 按 SPEC 明确不做的：默认不联网（可选「同步码多设备同步」，需用户显式配置）、无工时统计 / 计时器、无报告模板自定义、无文件导出、无移动端。
