@@ -1,6 +1,6 @@
 {
   "name": "lightframe-worklog",
-  "version": "2.10.1",
+  "version": "2.10.2",
   "description": "桌面任务与日报周报工具",
   "main": "main.js",
   "author": "Lightframe",
@@ -31,6 +31,7 @@
   "build": {
     "appId": "com.lightframe.worklog",
     "productName": "光影工作志",
+    "afterPack": "./scripts/after-pack-slim.js",
     "electronLanguages": [
       "zh-CN",
       "zh-TW",

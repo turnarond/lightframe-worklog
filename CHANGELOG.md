@@ -6,6 +6,14 @@
 
 （暂无）
 
+## [2.10.2] - 2026-11-21 · 安装包温和瘦身
+
+### Changed
+- 打包后移除本应用不使用的 `dxcompiler.dll`（WebGPU/DXC）与 `ffmpeg.dll`（音视频解码），
+  以及未使用的 `resources/default_app.asar`。
+- 保留 Vulkan / SwiftShader / d3dcompiler / icudtl / 许可证与三语言包，维持 GPU/RDP 兼容。
+- 无业务逻辑、数据格式与同步协议变更。
+
 ## [2.10.1] - 2026-11-21 · 头部同步按钮收敛
 
 ### Changed
