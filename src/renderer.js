@@ -931,7 +931,7 @@
     }
     D['w-todayCount'].textContent = list.length ? '(' + list.length + ')' : '';
     if (!list.length) {
-      box.appendChild(el('p', { class: 'empty', text: (day === state.today) ? '今日暂无到期任务' : (mmdd(day) + ' 暂无到期任务') }));
+      box.appendChild(el('p', { class: 'empty', text: (day === state.today) ? '今天还没有任务，在上方随手记一笔' : (mmdd(day) + ' 没有到期任务') }));
       return;
     }
     list.forEach(function (task) {
@@ -1042,7 +1042,7 @@
     clear(box);
 
     if (!data.completedByCategory.length) {
-      box.appendChild(el('p', { class: 'empty', text: '今天还没有完成的任务' }));
+      box.appendChild(el('p', { class: 'empty', text: '今天还没有完成的任务，完成一项后会出现在这里' }));
       return;
     }
     data.completedByCategory.forEach(function (group) {
@@ -1154,7 +1154,7 @@
     var doneBox = D['weekly-completed'];
     clear(doneBox);
     if (!data.completedByCategory.length) {
-      doneBox.appendChild(el('p', { class: 'empty', text: '本周还没有完成的任务' }));
+      doneBox.appendChild(el('p', { class: 'empty', text: '本周还没有完成的任务，完成后会自动汇总' }));
     } else {
       data.completedByCategory.forEach(function (group) {
         var block = el('div', { class: 'wk-group' });
@@ -1173,7 +1173,7 @@
     var progressBox = D['weekly-progress'];
     clear(progressBox);
     if (!data.progress.length) {
-      progressBox.appendChild(el('p', { class: 'empty', text: '这一周没有填写进展' }));
+      progressBox.appendChild(el('p', { class: 'empty', text: '这一周还没有填写进展，可在日报里补记' }));
     } else {
       data.progress.forEach(function (item) {
         progressBox.appendChild(el('div', { class: 'wk-entry' }, [
@@ -1187,7 +1187,7 @@
     var issuesBox = D['weekly-issues'];
     clear(issuesBox);
     if (!data.issues.length) {
-      issuesBox.appendChild(el('p', { class: 'empty', text: '这一周没有记录问题' }));
+      issuesBox.appendChild(el('p', { class: 'empty', text: '这一周还没有记录问题，遇到卡点随手记下' }));
     } else {
       data.issues.forEach(function (item) {
         issuesBox.appendChild(el('div', { class: 'wk-entry' }, [
@@ -1211,7 +1211,7 @@
     ]));
 
     if (!data.distribution.length) {
-      overview.appendChild(el('p', { class: 'empty', text: '这一周还没有完成记录' }));
+      overview.appendChild(el('p', { class: 'empty', text: '这一周还没有完成记录，先完成一项任务' }));
     } else {
       var max = data.distribution.reduce(function (m, item) { return Math.max(m, item.count); }, 1);
       data.distribution.forEach(function (item) {
