@@ -66,6 +66,16 @@ jobs:
       - name: Package app payload
         run: npm run pack:dir
 
+      - name: Verify slim payload
+        shell: bash
+        run: |
+          for f in dxcompiler.dll ffmpeg.dll resources/default_app.asar; do
+            if [ -e "dist/win-unpacked/$f" ]; then
+              echo "unexpected file after slim: $f"
+              exit 1
+            fi
+          done
+
       - name: Verify packaged Electron version
         shell: bash
         run: |
