@@ -208,6 +208,7 @@ async function main() {
       await ev("(function(){var s=getComputedStyle(document.getElementById('sync-server'));return s.backgroundColor.indexOf('255, 255, 255, 0.14')<0;})()");
     results['账号体系 UI 已移除'] =
       await ev("!document.getElementById('acc-email') && !document.getElementById('acc-password') && !document.getElementById('acc-submit')");
+    results['头部同步按钮已移除'] = await ev("!document.getElementById('w-sync')");
     results['同步码区控件齐全'] =
       await ev("!!document.getElementById('sync-code') && !!document.getElementById('sync-apply') && !!document.getElementById('sync-generate') && !!document.getElementById('sync-clear')");
     results['同步码模块在渲染进程可用'] =
