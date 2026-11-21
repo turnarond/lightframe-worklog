@@ -1,6 +1,6 @@
 {
   "name": "lightframe-worklog",
-  "version": "2.8.1",
+  "version": "2.8.2",
   "description": "桌面任务与日报周报工具",
   "main": "main.js",
   "author": "Lightframe",
@@ -30,6 +30,11 @@
   "build": {
     "appId": "com.lightframe.worklog",
     "productName": "光影工作志",
+    "electronLanguages": [
+      "zh-CN",
+      "zh-TW",
+      "en-US"
+    ],
     "directories": {
       "buildResources": "assets"
     },
@@ -39,6 +44,7 @@
       "index.html",
       "quick-add.html",
       "src/**/*",
+      "!src/**/*.test.js",
       "assets/**/*"
     ],
     "win": {
