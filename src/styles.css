@@ -1578,7 +1578,6 @@ body.ready .reveal { opacity: 1; transform: none; }
 .btn-mini.primary { background: var(--accent-ink); color: #fff; border: none; font-weight: 600; }
 #acc-submit[disabled] { opacity: .6; cursor: default; }
 #acc-status { margin: 6px 0 2px; }
-#w-sync.is-on { color: var(--green); font-weight: 700; }
 
 /* init 异常兜底：浮于内容之上、明确可读，避免静默白屏 */
 .init-error {

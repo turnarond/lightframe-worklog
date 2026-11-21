@@ -1368,21 +1368,12 @@
     D['sync-status'].className = cls;
     D['sync-clear'].hidden = !state.settings.syncCode;
     if (D['sync-now']) D['sync-now'].disabled = (state.syncState === 'syncing');
-    updateSyncIndicator();
   }
 
   async function onManualSync() {
     if (state.syncState === 'syncing') return;
     showToast('正在同步…');
     await apiCall('syncNow', null);
-  }
-
-  function updateSyncIndicator() {
-    var btn = D['w-sync'];
-    if (!btn) return;
-    var on = !!(state.settings.syncCode && state.settings.serverUrl);
-    btn.classList.toggle('is-on', on);
-    btn.title = on ? '多设备同步已启用（点击打开设置）' : '多设备同步设置';
   }
 
   async function applySyncCode() {
@@ -1542,10 +1533,6 @@
       if (typeof bridge.quit === 'function') { try { bridge.quit(); } catch (e) { /* 忽略 */ } }
     });
     D['w-settings'].addEventListener('click', openSettings);
-    if (D['w-sync']) D['w-sync'].addEventListener('click', function () {
-      openSettings();
-      if (D['sync-server']) D['sync-server'].focus();
-    });
     D['sync-apply'].addEventListener('click', applySyncCode);
     D['sync-generate'].addEventListener('click', generateSyncCode);
     D['sync-copy'].addEventListener('click', copySyncCode);
@@ -1715,7 +1702,6 @@
       'w-todayCount', 'w-tlist', 'w-panel',
       'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'set-opacity', 'set-opacity-val', 'set-scale', 'set-scale-val', 'btn-quit', 'toast',
       'app-version', 'check-update',
-      'w-sync',
       'sync-block', 'sync-server', 'sync-code', 'sync-status',
       'sync-apply', 'sync-generate', 'sync-copy', 'sync-clear', 'sync-now'
     ].forEach(function (id) {
@@ -1876,7 +1862,6 @@
     renderWeekly();
     renderSettings();
     setupMarkdownFields();
-    updateSyncIndicator();
     applyTabUI();
 
     // 桌面挂件：应用形态（透明/折叠）+ 初次渲染迷你月历与今日任务
