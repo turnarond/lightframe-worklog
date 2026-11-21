@@ -97,9 +97,12 @@ async function main() {
     const { send, ev, consoleErrors } = session;
     await send('Runtime.enable');
     await send('Page.enable');
+    // 唯一文档标记：Page.reload 后旧文档同样有 cat-chips，必须等新文档落地再断言
+    const docToken = 'smoke-' + process.pid + '-' + Date.now();
     // 每次文档加载前注入错误收集：unhandledrejection 不会被 Runtime.exceptionThrown 捕获
     await send('Page.addScriptToEvaluateOnNewDocument', {
       source: [
+        'window.__smokeDocToken = ' + JSON.stringify(docToken) + ';',
         'window.__smokeErrors = [];',
         "window.addEventListener('error', function (e) { window.__smokeErrors.push('error: ' + e.message); });",
         "window.addEventListener('unhandledrejection', function (e) {",
@@ -115,13 +118,18 @@ async function main() {
     // 预置一个非默认字号，验证渲染端合并器不会在重启后把它丢掉
     await ev("(async function(){var s=await window.api.loadSettings();s.widget=s.widget||{};s.widget.scale=1.25;s.widget.expanded=false;await window.api.saveSettings(s);return true;})()");
     await send('Page.reload', { ignoreCache: true });
-    // 等新文档 init 落地，而不是固定 sleep（隐藏窗口下 rAF 可能被节流）
-    for (let i = 0; i < 24; i++) {
-      await sleep(300);
-      const done = await ev("document.readyState === 'complete' && !!document.getElementById('cat-chips')");
-      if (done) break;
+    // 等新文档 init 落地：唯一 token + body.ready，二者缺一不可
+    let docReady = false;
+    for (let i = 0; i < 40; i++) {
+      await sleep(250);
+      docReady = await ev("document.readyState === 'complete' && window.__smokeDocToken === " +
+        JSON.stringify(docToken) + " && document.body.classList.contains('ready')");
+      if (docReady) break;
     }
-    await sleep(600);
+    if (!docReady) {
+      console.log('诊断: 新文档未就绪', await ev("JSON.stringify({readyState:document.readyState,token:window.__smokeDocToken,bodyClass:document.body.className})"));
+    }
+    await sleep(200);
 
     console.log('诊断:', await ev("JSON.stringify({readyState:document.readyState, bodyClass:document.body.className, taskRows:document.querySelectorAll('#task-groups .task').length, chips:document.querySelectorAll('#cat-chips > *').length, initErr:document.querySelectorAll('.init-error').length, errs:window.__smokeErrors})"));
 
