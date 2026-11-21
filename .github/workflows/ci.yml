@@ -50,7 +50,7 @@ jobs:
       - name: Syntax check
         shell: bash
         run: |
-          for f in main.js preload.js src/*.js tools/*.js server-lite/*.js; do
+          for f in main.js preload.js src/*.js tools/*.js server-lite/*.js scripts/*.js; do
             node --check "$f" || exit 1
           done
 
