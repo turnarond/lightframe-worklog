@@ -6,6 +6,15 @@
 
 （暂无）
 
+## [2.10.0] - 2026-11-21 · 依赖安全升级（Electron 45）
+
+### Changed
+- Electron 33 → 45、electron-builder 25 → 26、dompurify 3.4.18；`npm audit` 的 critical/high 清零，
+  剩余 6 项 moderate 仅在构建链。
+- 安装包体积 75.4 → 113.9 MB（Electron 运行时代际增长）；语言包仍仅中英三个。
+- 发布构建必须从干净 worktree `npm ci` 完成；本机混合 `node_modules` 会静默产出旧 Electron。
+- 无业务逻辑、数据格式与同步协议变更。
+
 ## [2.9.0] - 2026-11-21 · UI P1 视觉与可读性
 
 ### Changed
