@@ -17,6 +17,7 @@
     "smoke": "node tools/smoke-ui.js",
     "smoke:boot": "node tools/smoke-boot.js",
     "dist": "electron-builder --win nsis",
+    "pack:dir": "electron-builder --win dir",
     "dist:portable": "electron-builder --win portable",
     "release": "electron-builder --win nsis --publish=always"
   },

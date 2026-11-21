@@ -1,5 +1,7 @@
 # 光影工作志 · Lightframe Worklog
 
+[![CI](https://github.com/turnarond/lightframe-worklog/actions/workflows/ci.yml/badge.svg)](https://github.com/turnarond/lightframe-worklog/actions/workflows/ci.yml)
+
 常驻 Windows 桌面的半透明工作挂件。核心链路：
 
 > 随手记任务 → 按项目分类 → 完成 → 每天汇总日报 → 每周汇总周报 → 一键复制发出

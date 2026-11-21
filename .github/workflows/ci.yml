@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows gates
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Electron package and binary match
+        shell: bash
+        run: |
+          node -e "const fs=require('fs');const pkg=require('./node_modules/electron/package.json').version;const dist=fs.readFileSync('node_modules/electron/dist/version','utf8').trim();if(pkg!==dist){console.error('electron mismatch',pkg,dist);process.exit(1)}console.log('electron',dist)"
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Syntax check
+        shell: bash
+        run: |
+          for f in main.js preload.js src/*.js tools/*.js server-lite/*.js; do
+            node --check "$f" || exit 1
+          done
+
+      - name: Audit high and critical
+        run: npm audit --audit-level=high
+
+      - name: Boot smoke
+        run: npm run smoke:boot
+
+      - name: LAN sync self-host
+        run: node tools/verify-lan.js --self-host
+
+      - name: Package app payload
+        run: npm run pack:dir
+
+      - name: Verify packaged Electron version
+        shell: bash
+        run: |
+          node -e "const fs=require('fs'),path=require('path');const dir='dist/win-unpacked';const exe=fs.readdirSync(dir).find(f=>/\.exe$/i.test(f)&&!/^elevate\.exe$/i.test(f));if(!exe){console.error('packaged exe not found');process.exit(1)}const v=fs.readFileSync('node_modules/electron/dist/version','utf8').trim();const b=fs.readFileSync(path.join(dir,exe));if(!b.includes(Buffer.from('Electron/'+v))){console.error('packaged Electron mismatch',exe,v);process.exit(1)}console.log('packaged Electron',v,exe)"
+
+      - name: Packaged UI smoke
+        run: npm run smoke
