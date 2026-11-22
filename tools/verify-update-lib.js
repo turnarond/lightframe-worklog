@@ -58,8 +58,9 @@ function parseLatestYml(text) {
 }
 
 function parseVerifyUpdateArgs(argv) {
-  const keys = { '--old-app-dir': 'oldAppDir', '--new-dir': 'newDir', '--test-root': 'testRoot' };
-  const opts = { oldAppDir: null, newDir: null, testRoot: null };
+  const keys = { '--old-app-dir': 'oldAppDir', '--new-dir': 'newDir', '--test-root': 'testRoot', '--log-file': 'logFile' };
+  const required = { oldAppDir: '--old-app-dir', newDir: '--new-dir', testRoot: '--test-root' };
+  const opts = { oldAppDir: null, newDir: null, testRoot: null, logFile: null };
   const list = argv || [];
   for (let i = 0; i < list.length; i++) {
     const arg = list[i];
@@ -68,7 +69,7 @@ function parseVerifyUpdateArgs(argv) {
     if (i + 1 >= list.length || list[i + 1].startsWith('--')) throw new Error('缺少参数值: ' + arg);
     opts[key] = list[++i];
   }
-  const missing = Object.keys(keys).filter((k) => !opts[keys[k]]);
+  const missing = Object.keys(required).filter((k) => !opts[k]).map((k) => required[k]);
   if (missing.length) throw new Error('缺少必填参数: ' + missing.join(', '));
   return opts;
 }

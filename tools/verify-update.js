@@ -2,6 +2,8 @@
 // 本地端到端更新验证：复制旧版解包目录到临时 test-root，注入本地 generic feed，
 // 经 CDP 触发 check → download，并校验缓存安装包哈希。
 // 不运行任何 NSIS 安装/卸载，不触碰日常安装与用户数据。
+// 用法：--old-app-dir <解包目录> --new-dir <feed> --test-root <tmp> [--log-file <path>]
+// 日志默认写到 <test-root>.verify-update.log；PASS 后仍保留并打印绝对路径。
 'use strict';
 
 const { spawn, spawnSync } = require('node:child_process');
@@ -321,12 +323,18 @@ async function main() {
     throw new Error('--old-app-dir 必须是已解包目录（缺少 ' + APP_EXE + '）: ' + oldAppDir);
   }
   const feed = inspectFeed(newDir);
+  const retainedLog = opts.logFile ? path.resolve(opts.logFile) : testRoot + '.verify-update.log';
+  if (isInside(testRoot, retainedLog)) {
+    throw new Error('--log-file 不得位于 test-root 内: ' + retainedLog);
+  }
   if (fs.existsSync(testRoot) && fs.readdirSync(testRoot).length) {
     throw new Error('test-root 已存在且非空，请先清理: ' + testRoot);
   }
 
   fs.mkdirSync(testRoot, { recursive: true });
-  logStream = fs.createWriteStream(path.join(testRoot, 'verify-update.log'), { flags: 'a' });
+  fs.mkdirSync(path.dirname(retainedLog), { recursive: true });
+  logStream = fs.createWriteStream(retainedLog, { flags: 'a' });
+  log('LOG_FILE=' + retainedLog);
   log('参数: old-app-dir=' + oldAppDir + ' new-dir=' + newDir + ' test-root=' + testRoot);
   log('FEED version=' + feed.info.version + ' installer=' + feed.info.path +
     ' size=' + feed.size + ' sha256=' + feed.sha256);
@@ -398,6 +406,7 @@ async function main() {
     } else {
       console.log('失败现场已保留: ' + testRoot);
     }
+    console.log('LOG_FILE=' + retainedLog);
   }
 }
 

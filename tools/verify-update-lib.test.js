@@ -97,8 +97,19 @@ test('parseVerifyUpdateArgs 解析三个必填参数', () => {
   assert.deepStrictEqual(opts, {
     oldAppDir: 'unpacked',
     newDir: 'dist',
-    testRoot: 'tmp/root'
+    testRoot: 'tmp/root',
+    logFile: null
   });
+});
+
+test('parseVerifyUpdateArgs 接受可选 --log-file', () => {
+  const opts = lib.parseVerifyUpdateArgs([
+    '--old-app-dir', 'unpacked',
+    '--new-dir', 'dist',
+    '--test-root', 'tmp/root',
+    '--log-file', 'logs/drill.log'
+  ]);
+  assert.strictEqual(opts.logFile, 'logs/drill.log');
 });
 
 test('parseVerifyUpdateArgs 缺参或未知参数时报错', () => {
