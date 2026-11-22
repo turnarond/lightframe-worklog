@@ -22,6 +22,16 @@ contextBridge.exposeInMainWorld('api', {
   loadSettings: function () { return ipcRenderer.invoke('settings:load'); },
   saveSettings: function (settings) { return ipcRenderer.invoke('settings:save', settings); },
 
+  // 数据备份 / 恢复
+  listBackups: function () { return ipcRenderer.invoke('backup:list'); },
+  createBackup: function () { return ipcRenderer.invoke('backup:create'); },
+  restoreBackup: function (id) { return ipcRenderer.invoke('backup:restore', id); },
+  exportBackup: function (id, includeSecrets) { return ipcRenderer.invoke('backup:export', id, includeSecrets); },
+  importBackup: function (text) { return ipcRenderer.invoke('backup:import', text); },
+  openBackupDir: function () { return ipcRenderer.invoke('backup:openDir'); },
+  getDataStatus: function () { return ipcRenderer.invoke('data:status'); },
+  resumeSync: function () { return ipcRenderer.invoke('sync:resume'); },
+
   // 多设备同步（同步码）
   syncApply: function (payload) { return ipcRenderer.invoke('sync:apply', payload); },
   syncClear: function () { return ipcRenderer.invoke('sync:clear'); },
@@ -79,5 +89,11 @@ contextBridge.exposeInMainWorld('api', {
     const handler = function (_event, info) { cb(info); };
     ipcRenderer.on('sync:conflict', handler);
     return function () { ipcRenderer.removeListener('sync:conflict', handler); };
+  },
+  onDataStatus: function (cb) {
+    if (typeof cb !== 'function') return function () {};
+    const handler = function (_event, status) { cb(status); };
+    ipcRenderer.on('data:status', handler);
+    return function () { ipcRenderer.removeListener('data:status', handler); };
   }
 });

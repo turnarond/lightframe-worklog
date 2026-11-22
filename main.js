@@ -3,6 +3,7 @@
 
 const path = require('node:path');
 const fs = require('node:fs');
+const fsp = require('node:fs').promises;
 const {
   app,
   BrowserWindow,
@@ -14,11 +15,16 @@ const {
   clipboard,
   nativeImage,
   screen,
-  net
+  net,
+  dialog,
+  shell
 } = require('electron');
 
-const { createTaskStore, createLogStore, createSettingsStore, createSyncMetaStore, DEFAULT_SETTINGS } =
-  require('./src/store.js');
+const {
+  createTaskStore, createLogStore, createSettingsStore, createSyncMetaStore,
+  defaultSyncMeta, DEFAULT_SETTINGS
+} = require('./src/store.js');
+const { createBackupManager } = require('./src/backup.js');
 const { createSyncBridge } = require('./src/syncBridge.js');
 const { normalizeStartupSettings } = require('./src/startupSettings.js');
 const SyncCode = require('./src/syncCode.js');
@@ -74,6 +80,9 @@ let syncTimer = null;
 let stores = null;
 let syncBridge = null;
 let syncMetaStore = null;
+let backupManager = null;
+
+const dataStatus = { tasks: null, logs: null, settings: null };
 
 let settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 let tasksCache = [];
@@ -426,6 +435,10 @@ async function updateLastSyncAt(ts) {
 }
 
 async function runSync() {
+  if (settings.syncPaused) {
+    sendToMain('sync:status', { state: 'paused' });
+    return;
+  }
   if (!syncBridge || !settings.syncCode || !settings.serverUrl) return;
   // 离线：不静默清空状态，显式告知并附带待推送条数
   if (typeof net.isOnline === 'function' && !net.isOnline()) {
@@ -445,6 +458,16 @@ async function runSync() {
   }
 }
 
+function assertWritable(kind) {
+  const st = dataStatus[kind];
+  if (!st || !st.corrupt) return;
+  const err = new Error(kind === 'tasks' ? '任务数据损坏，请先从备份恢复'
+    : kind === 'logs' ? '日报数据损坏，请先从备份恢复'
+      : '设置数据损坏，请先从备份恢复');
+  err.corrupt = true;
+  throw err;
+}
+
 // ---------- IPC ----------
 function registerIpc() {
   ipcMain.handle('tasks:load', function () {
@@ -452,6 +475,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('tasks:save', async function (_event, tasks) {
+    assertWritable('tasks');
     const list = Array.isArray(tasks) ? tasks : [];
     tasksCache = list;
     await stores.tasks.save(list);
@@ -464,6 +488,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('logs:save', async function (_event, logs) {
+    assertWritable('logs');
     logsCache = logs && typeof logs === 'object' ? logs : {};
     await stores.logs.save(logsCache);
     if (syncBridge) syncBridge.markDirty('daily_logs');
@@ -475,6 +500,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('settings:save', async function (_event, next) {
+    assertWritable('settings');
     const merged = Object.assign({}, settings, next || {});
     // 壁纸穿透态已移除：清理历史 settings.json 里可能残留的废弃字段
     merged.widget = Object.assign({}, merged.widget || {});
@@ -493,6 +519,7 @@ function registerIpc() {
     if (!serverUrl) return { ok: false, error: '请填写服务器地址' };
     settings.syncCode = code;
     settings.serverUrl = serverUrl;
+    settings.syncPaused = false;
     await persistSettings();
     if (syncBridge) {
       syncBridge.setAuth(serverUrl, code);
@@ -513,6 +540,90 @@ function registerIpc() {
   ipcMain.handle('sync:now', async function () {
     await runSync();
     return { ok: true };
+  });
+
+  ipcMain.handle('sync:resume', async function () {
+    settings.syncPaused = false;
+    await persistSettings();
+    runSync();
+    return { ok: true };
+  });
+
+  // ---------- 数据备份 / 恢复 ----------
+  ipcMain.handle('backup:list', async function () {
+    return {
+      ok: true,
+      items: await backupManager.list(),
+      usage: await backupManager.spaceUsage()
+    };
+  });
+
+  ipcMain.handle('backup:create', async function () {
+    const r = await backupManager.beforeWrite('manual');
+    return { ok: true, created: r.created, id: r.id || null };
+  });
+
+  ipcMain.handle('backup:restore', async function (_event, id) {
+    const result = await backupManager.restore(id);
+    const s = await stores.settings.loadWithStatus();
+    dataStatus.settings = s;
+    settings = normalizeStartupSettings(s.data || JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+    settings.syncPaused = true;
+    await stores.settings.save(settings);
+    await syncMetaStore.save(defaultSyncMeta());
+    dataStatus.tasks = await stores.tasks.loadWithStatus();
+    dataStatus.logs = await stores.logs.loadWithStatus();
+    dataStatus.settings = await stores.settings.loadWithStatus();
+    tasksCache = dataStatus.tasks.data;
+    logsCache = dataStatus.logs.data;
+    sendToMain('refresh');
+    sendToMain('data:status', dataStatus);
+    return { ok: true, preRestoreId: result.preRestoreId, restoredFiles: result.restoredFiles, syncPaused: true };
+  });
+
+  ipcMain.handle('backup:export', async function (_event, id, includeSecrets) {
+    const out = await backupManager.exportBundle(id, { includeSecrets: !!includeSecrets });
+    const picked = await dialog.showSaveDialog({
+      defaultPath: out.filename,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    });
+    if (picked.canceled || !picked.filePath) return { ok: false, canceled: true };
+    await fsp.writeFile(picked.filePath, out.text, 'utf8');
+    return { ok: true, path: picked.filePath };
+  });
+
+  ipcMain.handle('backup:import', async function (_event, text) {
+    const parsed = await backupManager.importBundle(text);
+    const result = await backupManager.restoreBundle(parsed.bundle);
+    const s = await stores.settings.loadWithStatus();
+    dataStatus.settings = s;
+    settings = normalizeStartupSettings(s.data || JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+    settings.syncPaused = true;
+    await stores.settings.save(settings);
+    await syncMetaStore.save(defaultSyncMeta());
+    dataStatus.tasks = await stores.tasks.loadWithStatus();
+    dataStatus.logs = await stores.logs.loadWithStatus();
+    dataStatus.settings = await stores.settings.loadWithStatus();
+    tasksCache = dataStatus.tasks.data;
+    logsCache = dataStatus.logs.data;
+    sendToMain('refresh');
+    sendToMain('data:status', dataStatus);
+    return {
+      ok: true,
+      taskCount: parsed.summary.taskCount,
+      logDays: parsed.summary.logDays,
+      preRestoreId: result.preRestoreId,
+      syncPaused: true
+    };
+  });
+
+  ipcMain.handle('backup:openDir', async function () {
+    await shell.openPath(path.join(app.getPath('userData'), 'backups'));
+    return true;
+  });
+
+  ipcMain.handle('data:status', function () {
+    return dataStatus;
   });
 
   ipcMain.handle('app:copy', function (_event, text) {
@@ -624,14 +735,21 @@ function registerIpc() {
 async function bootstrap() {
   const userData = app.getPath('userData');
 
+  backupManager = createBackupManager({
+    dataDir: userData,
+    backupDir: path.join(userData, 'backups'),
+    appVersion: app.getVersion()
+  });
+  const beforeWrite = function () { return backupManager.beforeWrite('write'); };
+
   stores = {
-    tasks: createTaskStore(path.join(userData, 'tasks.json')),
-    logs: createLogStore(path.join(userData, 'dailyLogs.json')),
-    settings: createSettingsStore(path.join(userData, 'settings.json'))
+    tasks: createTaskStore(path.join(userData, 'tasks.json'), { beforeWrite: beforeWrite }),
+    logs: createLogStore(path.join(userData, 'dailyLogs.json'), { beforeWrite: beforeWrite }),
+    settings: createSettingsStore(path.join(userData, 'settings.json'), { beforeWrite: beforeWrite })
   };
 
   // v3.0：本地 store 不变，新增 SyncEngine 桥接；登录后置 baseUrl/token 才会真正推送
-  syncMetaStore = createSyncMetaStore(path.join(userData, 'syncmeta.json'));
+  syncMetaStore = createSyncMetaStore(path.join(userData, 'syncmeta.json'), { beforeWrite: beforeWrite });
   syncBridge = createSyncBridge({
     tasksStore: stores.tasks,
     logsStore: stores.logs,
@@ -641,31 +759,20 @@ async function bootstrap() {
     onConflict: function (info) { sendToMain('sync:conflict', info); }
   });
 
-  try {
-    settings = await stores.settings.load();
-  } catch (err) {
-    console.warn('[settings] 读取失败，使用默认值：', err && err.message);
-    settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
-  }
-  // 清理历史 settings.json 中已废弃的壁纸穿透字段；窗口始终以普通可交互形态启动。
-  settings = normalizeStartupSettings(settings);
+  const settingsStatus = await stores.settings.loadWithStatus();
+  dataStatus.settings = settingsStatus;
+  settings = normalizeStartupSettings(settingsStatus.data || JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
 
   // 同步码：启动即恢复，使重启后本地改动继续自动同步
   if (settings.syncCode && settings.serverUrl && syncBridge) {
     syncBridge.setAuth(settings.serverUrl, settings.syncCode);
   }
-  try {
-    tasksCache = await stores.tasks.load();
-  } catch (err) {
-    console.warn('[tasks] 读取失败：', err && err.message);
-    tasksCache = [];
-  }
-  try {
-    logsCache = await stores.logs.load();
-  } catch (err) {
-    console.warn('[logs] 读取失败：', err && err.message);
-    logsCache = {};
-  }
+  const tasksStatus = await stores.tasks.loadWithStatus();
+  dataStatus.tasks = tasksStatus;
+  tasksCache = tasksStatus.data;
+  const logsStatus = await stores.logs.loadWithStatus();
+  dataStatus.logs = logsStatus;
+  logsCache = logsStatus.data;
 
   ready = true;
 
@@ -674,6 +781,8 @@ async function bootstrap() {
   // 渲染层订阅 sync:status 后再推送「上次同步时间」，避免事件在订阅前发出被丢弃
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.once('did-finish-load', function () {
+      sendToMain('data:status', dataStatus);
+      if (settings.syncPaused) sendToMain('sync:status', { state: 'paused' });
       if (!syncMetaStore) return;
       syncMetaStore.load().then(function (m) {
         if (m && m.lastSyncAt) {
