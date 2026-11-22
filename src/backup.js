@@ -20,6 +20,10 @@ function settingsForHash(text) {
       delete s.lastReminded;
       if (s.widget && typeof s.widget === 'object') {
         delete s.widget.rect;
+        delete s.widget.expanded;
+        delete s.widget.opacity;
+        delete s.widget.blur;
+        delete s.widget.scale;
         if (Object.keys(s.widget).length === 0) delete s.widget;
       }
       return JSON.stringify(s);

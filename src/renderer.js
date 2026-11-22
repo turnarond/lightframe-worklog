@@ -1453,8 +1453,8 @@
   }
 
   function syncStatusText() {
-    if (state.settings.syncPaused) return '同步已暂停（恢复备份后）';
     if (!state.settings.syncCode || !state.settings.serverUrl) return '未配置同步';
+    if (state.settings.syncPaused) return '同步已暂停（恢复备份后）';
     var pendingTxt = state.syncPending > 0 ? ('（待推送 ' + state.syncPending + ' 条）') : '';
     if (state.syncState === 'syncing') return '同步中…' + pendingTxt;
     if (state.syncState === 'offline') return '离线' + pendingTxt;
@@ -1477,7 +1477,9 @@
     else if (state.lastSyncAt) cls += ' sync-ok';
     D['sync-status'].className = cls;
     D['sync-clear'].hidden = !state.settings.syncCode;
-    if (D['sync-resume']) D['sync-resume'].hidden = !state.settings.syncPaused;
+    if (D['sync-resume']) {
+      D['sync-resume'].hidden = !state.settings.syncPaused || !state.settings.syncCode;
+    }
     if (D['sync-now']) D['sync-now'].disabled = (state.syncState === 'syncing');
   }
 
@@ -1914,6 +1916,8 @@
           state.syncState = s.state;
           if (s.state === 'paused') {
             state.settings.syncPaused = true;
+          } else if (s.state === 'idle') {
+            state.settings.syncPaused = false;
           } else if (s.state === 'synced') {
             state.syncError = '';
             state.settings.syncPaused = false;
