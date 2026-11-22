@@ -16,5 +16,5 @@ module.exports = async function afterPack(context) {
     fs.rmSync(target, { force: true });
     removed.push(rel);
   }
-  console.log('[afterPack] slim removed:', removed.length ? removed.join(', ') : 'none');
+  console.log('[afterPack] trim removed:', removed.length ? removed.join(', ') : 'none');
 };
