@@ -27,7 +27,7 @@ npm start        # 启动应用
 
 | 命令 | 说明 |
 |---|---|
-| `npm test` | 跑单元/集成测试（160 项，不依赖 Electron）：`node --test src/*.test.js server-lite/*.test.js` |
+| `npm test` | 跑单元/集成测试（161 项，不依赖 Electron）：`node --test src/*.test.js server-lite/*.test.js` |
 | `npm run icon` | 重新生成 `assets/icon.png` |
 | `npm run dist` | 打包 Windows 便携版 `exe`（输出在 `dist/`） |
 
@@ -41,11 +41,11 @@ npm start        # 启动应用
 
 > **当前安装包未做代码签名**，Windows SmartScreen 可能显示「未知发布者 / Unknown app」。点「更多信息」→「仍要运行」即可；这是未签名程序的系统提示，不代表安装包损坏。
 
-下载后建议校验 SHA-256（v2.10.2，安装包约 101.1 MiB）：
+下载后建议校验 SHA-256（v2.11.0，安装包约 101.1 MiB）：
 
 ```powershell
-Get-FileHash .\lightframe-worklog-setup-2.10.2.exe -Algorithm SHA256
-# 期望：22203DED086133BE1FB41A652930A2FEE1794E565F62EDFD6ABFA9A6BB2DA7E4
+Get-FileHash .\lightframe-worklog-setup-2.11.0.exe -Algorithm SHA256
+# 期望：C7EF69A13E5353367D270DEEDCA796B4F504A314F483901AEE47B87502E20BF3
 ```
 
 哈希不匹配时不要运行。代码签名方案见 `doc/05-运维/2026-11-21-SignPath代码签名接入.md`（当前暂缓）。
@@ -165,7 +165,7 @@ lightframe-worklog/
 
 ## 六、已验证（本机实测）
 
-- 单元/集成测试：`npm test` → **160 / 160 通过**（2026-11-21 实测）
+- 单元/集成测试：`npm test` → **161 / 161 通过**（2026-11-22 实测）
 - 桌面实机：窗口标题渲染正常；三个 Tab 切换与数据聚合正常
 - 完整链路：添加任务 → 勾选完成 → 日报/周报聚合与实际盖章格式 → 删除 → 落盘为空，**无 console.error 与未捕获异常**
 - 速记小窗：唤起后输入框自动聚焦、分类沿用上次、`Enter` 经 IPC 真实落盘、`Esc` 关闭
