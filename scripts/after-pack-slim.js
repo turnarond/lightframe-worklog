@@ -4,8 +4,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const REMOVE = [
-  'dxcompiler.dll',
-  'ffmpeg.dll',
   path.join('resources', 'default_app.asar')
 ];
 

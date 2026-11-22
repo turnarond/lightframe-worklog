@@ -69,7 +69,7 @@ jobs:
       - name: Verify slim payload
         shell: bash
         run: |
-          for f in dxcompiler.dll ffmpeg.dll resources/default_app.asar; do
+          for f in resources/default_app.asar; do
             if [ -e "dist/win-unpacked/$f" ]; then
               echo "unexpected file after slim: $f"
               exit 1
