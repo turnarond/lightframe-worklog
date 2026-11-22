@@ -47,6 +47,12 @@ jobs:
       - name: Unit and integration tests
         run: npm test
 
+      - name: Release helper tests
+        run: npm run test:release
+
+      - name: Release preflight
+        run: node scripts/release.js --check
+
       - name: Syntax check
         shell: bash
         run: |

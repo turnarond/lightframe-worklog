@@ -38,6 +38,8 @@
 | 局域网同步自测 | `node tools/verify-lan.js --self-host` | 输出全项通过 |
 | 启动烟测 | `npm run smoke:boot` | 启动日志无 `[boot] 启动失败`，页面 ready |
 | UI 烟测 | `npm run smoke` | 无 console.error，断言全 PASS（需完整安装 Electron） |
+| 发布脚本测试 | `npm run test:release` | 全部通过，无失败用例 |
+| 发布预检 | `node scripts/release.js --check` | 输出 `release preflight OK`，不构建、不联网、不执行远端操作 |
 | 发布门 | `python scripts/release_gate.py <产物> --marker <标记> ...` | PASS，且旧产物不含标记 |
 | 变更卡 | `python scripts/check_change_card.py <卡> --json` | ok=true，无占位符 |
 | 评审证据 | `python scripts/check_review_evidence.py <证据> --json --require-second` | ok=true |
