@@ -127,7 +127,12 @@ function createBackupManager(options) {
       }
 
       const ts = now();
-      const id = idFor(ts);
+      let id = idFor(ts);
+      let suffix = 0;
+      while (fs.existsSync(path.join(backupDir, id))) {
+        suffix += 1;
+        id = idFor(ts) + '-' + suffix;
+      }
       const tmpDir = path.join(backupDir, '.tmp-' + id);
       const finalDir = path.join(backupDir, id);
       await fsp.mkdir(tmpDir, { recursive: true });
@@ -210,6 +215,7 @@ function createBackupManager(options) {
     try {
       for (const name of files) {
         const text = await fsp.readFile(path.join(dir, name), 'utf8');
+        JSON.parse(text); // 恢复点损坏时先失败，不覆盖现有数据
         const target = path.join(dataDir, name);
         originals[name] = await fsp.readFile(target, 'utf8').catch(() => null);
         await writeAtomic(target, text);
@@ -251,11 +257,23 @@ function createBackupManager(options) {
     };
   }
 
-  async function importBundle(text) {
-    const bundle = JSON.parse(text);
+  function assertBundleShape(bundle) {
     if (!bundle || bundle.format !== 'lightframe-backup' || bundle.formatVersion !== 1) {
       throw new Error('不是受支持的备份文件');
     }
+    if (!bundle.files || typeof bundle.files !== 'object') throw new Error('备份文件缺少 files');
+    if (!Array.isArray(bundle.files.tasks)) throw new Error('tasks 必须是数组');
+    for (const key of ['dailyLogs', 'settings', 'syncmeta']) {
+      if (!bundle.files[key] || typeof bundle.files[key] !== 'object' || Array.isArray(bundle.files[key])) {
+        throw new Error(key + ' 必须是对象');
+      }
+    }
+    if (!bundle.checksums || typeof bundle.checksums !== 'object') throw new Error('备份缺少 checksums');
+  }
+
+  async function importBundle(text) {
+    const bundle = JSON.parse(text);
+    assertBundleShape(bundle);
     for (const key of ['tasks', 'dailyLogs', 'settings', 'syncmeta']) {
       if (!(key in bundle.files)) throw new Error('备份缺少 ' + key);
       if (checksumOf(bundle.files[key]) !== bundle.checksums[key]) {
@@ -273,6 +291,7 @@ function createBackupManager(options) {
   }
 
   async function restoreBundle(bundle) {
+    assertBundleShape(bundle);
     const pre = await beforeWrite('pre-restore');
     const writes = [
       ['tasks.json', bundle.files.tasks],

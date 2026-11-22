@@ -622,6 +622,30 @@ function registerIpc() {
     return true;
   });
 
+  ipcMain.handle('backup:exportCorrupt', async function () {
+    const userData = app.getPath('userData');
+    const names = { tasks: 'tasks.json', logs: 'dailyLogs.json', settings: 'settings.json' };
+    const files = {};
+    for (const kind of Object.keys(names)) {
+      if (!dataStatus[kind] || !dataStatus[kind].corrupt) continue;
+      try {
+        files[names[kind]] = await fsp.readFile(path.join(userData, names[kind]), 'utf8');
+      } catch (e) {
+        files[names[kind]] = '';
+      }
+    }
+    if (!Object.keys(files).length) return { ok: false, error: '没有损坏文件' };
+    const picked = await dialog.showSaveDialog({
+      defaultPath: 'lightframe-corrupt-' + Date.now() + '.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    });
+    if (picked.canceled || !picked.filePath) return { ok: false, canceled: true };
+    await fsp.writeFile(picked.filePath, JSON.stringify({
+      format: 'lightframe-corrupt', exportedAt: new Date().toISOString(), files
+    }, null, 2), 'utf8');
+    return { ok: true, path: picked.filePath };
+  });
+
   ipcMain.handle('data:status', function () {
     return dataStatus;
   });

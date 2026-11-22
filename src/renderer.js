@@ -1670,8 +1670,10 @@
       if (!res || !res.items.length) { showToast('没有可用备份', 'error'); return; }
       restoreBackup(res.items[0].id);
     });
-    D['data-error-export'].addEventListener('click', function () {
-      showToast('请打开 userData 目录手动备份原文件', 'warn');
+    D['data-error-export'].addEventListener('click', async function () {
+      var res = await apiCall('exportCorrupt', { ok: false });
+      if (!res || !res.ok) { showToast((res && res.error) || '导出失败', 'error'); return; }
+      showToast('损坏文件已导出', 'ok');
     });
 
     D['w-prev'].addEventListener('click', function () {
