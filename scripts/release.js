@@ -177,8 +177,7 @@ function collectMaterials(opts, version, installer, out, log) {
     lib.renderReleaseNotes({ version, changeSummary: opts['change-summary'], assets }));
   log.log('OK 发布材料: ' + assets.map((a) => 'dist/' + a.name).join(', '));
   const files = assets.map((a) => 'dist/' + a.name);
-  console.log(lib.releaseCommands(version, files).join('\n'));
-  return distDir;
+  return { distDir, files };
 }
 
 function verifyUpdate(opts, version, log) {
@@ -223,13 +222,15 @@ if (require.main === module) {
       } catch (e) { throw new Error(e.message); }
       log.log('absent-marker: ' + absentMarker);
       const { out, installer } = buildAndVerify(opts, v, absentMarker, log);
-      collectMaterials(opts, v, installer, out, log);
+      const { files } = collectMaterials(opts, v, installer, out, log);
       if (opts['skip-update'] === true) {
         log.log('SKIP verify-update: 显式 --skip-update');
       } else {
         verifyUpdate(opts, v, log);
       }
       log.log('RESULT PASS');
+      // 发布命令只在更新验证成功（或显式跳过）后输出，失败时不得出现
+      console.log(lib.releaseCommands(v, files).join('\n'));
       console.log('发布日志: ' + log.file);
     } catch (e) {
       log.log('RESULT FAIL: ' + (e && e.message ? e.message : e));
