@@ -27,7 +27,7 @@ npm start        # 启动应用
 
 | 命令 | 说明 |
 |---|---|
-| `npm test` | 跑单元/集成测试（161 项，不依赖 Electron）：`node --test src/*.test.js server-lite/*.test.js` |
+| `npm test` | 跑单元/集成测试（166 项，不依赖 Electron）：`node --test src/*.test.js server-lite/*.test.js` |
 | `npm run icon` | 重新生成 `assets/icon.png` |
 | `npm run dist` | 打包 Windows 便携版 `exe`（输出在 `dist/`） |
 
@@ -45,7 +45,7 @@ npm start        # 启动应用
 
 ```powershell
 Get-FileHash .\lightframe-worklog-setup-2.11.0.exe -Algorithm SHA256
-# 期望：4350DA3C714BDF1072A0E98B02D9975AFAFC96B7F6CC1B636CEF0C58ED96CE0A
+# 期望：10527CBC27070972AF93D4FAB16D70FFA684D6EF32968AEE6596596B60CCAEE7
 ```
 
 哈希不匹配时不要运行。代码签名方案见 `doc/05-运维/2026-11-21-SignPath代码签名接入.md`（当前暂缓）。
@@ -165,7 +165,7 @@ lightframe-worklog/
 
 ## 六、已验证（本机实测）
 
-- 单元/集成测试：`npm test` → **161 / 161 通过**（2026-11-22 实测）
+- 单元/集成测试：`npm test` → **166 / 166 通过**（2026-11-22 实测）
 - 桌面实机：窗口标题渲染正常；三个 Tab 切换与数据聚合正常
 - 完整链路：添加任务 → 勾选完成 → 日报/周报聚合与实际盖章格式 → 删除 → 落盘为空，**无 console.error 与未捕获异常**
 - 速记小窗：唤起后输入框自动聚焦、分类沿用上次、`Enter` 经 IPC 真实落盘、`Esc` 关闭
