@@ -209,6 +209,12 @@ async function main() {
     results['账号体系 UI 已移除'] =
       await ev("!document.getElementById('acc-email') && !document.getElementById('acc-password') && !document.getElementById('acc-submit')");
     results['头部同步按钮已移除'] = await ev("!document.getElementById('w-sync')");
+    results['备份区已渲染'] =
+      await ev("!!document.getElementById('backup-list') && !!document.getElementById('backup-create')");
+    results['备份创建与列出'] =
+      await ev("(async function(){var r=await window.api.createBackup();if(!r||!r.ok)return false;var l=await window.api.listBackups();return !!(l&&l.ok&&l.items.length>=1);})()");
+    results['损坏提示入口存在'] =
+      await ev("!!document.getElementById('data-error') && !!document.getElementById('data-error-restore')");
     results['同步码区控件齐全'] =
       await ev("!!document.getElementById('sync-code') && !!document.getElementById('sync-apply') && !!document.getElementById('sync-generate') && !!document.getElementById('sync-clear')");
     results['同步码模块在渲染进程可用'] =

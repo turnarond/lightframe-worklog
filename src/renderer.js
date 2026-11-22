@@ -252,6 +252,11 @@
         ? source.weeklyPlans : {},
       syncCode: typeof source.syncCode === 'string' ? source.syncCode : defaults.syncCode,
       serverUrl: typeof source.serverUrl === 'string' ? source.serverUrl : defaults.serverUrl,
+      syncPaused: typeof source.syncPaused === 'boolean' ? source.syncPaused : false,
+      backup: {
+        enabled: source.backup && typeof source.backup.enabled === 'boolean'
+          ? source.backup.enabled : true
+      },
       widget: widget
     };
   }
@@ -1302,6 +1307,95 @@
     });
   }
 
+  function fmtBackupTime(ts) {
+    try { return new Date(ts).toLocaleString('zh-CN', { hour12: false }); }
+    catch (e) { return String(ts); }
+  }
+
+  async function renderBackupArea() {
+    if (!D['backup-list']) return;
+    var enabled = state.settings.backup ? state.settings.backup.enabled !== false : true;
+    D['backup-enabled'].checked = enabled;
+    try {
+      var res = await apiCall('listBackups', { ok: false, items: [], usage: 0 });
+      if (!res || res.ok === false) throw new Error((res && res.error) || '读取失败');
+      var list = D['backup-list'];
+      clear(list);
+      D['backup-status'].textContent = (enabled ? '自动备份已开启 · ' : '自动备份已关闭 · ') +
+        '已用 ' + (res.usage ? (res.usage / 1024).toFixed(0) + ' KB' : '0 KB') +
+        ' · 保留最近 10 份 + 每日 7 份';
+      if (!res.items.length) {
+        list.appendChild(el('p', { class: 'empty', text: '还没有恢复点，先点「立即备份」' }));
+        return;
+      }
+      res.items.forEach(function (item) {
+        var restore = el('button', { class: 'btn-mini', type: 'button', text: '恢复' });
+        var exportBtn = el('button', { class: 'btn-mini ghost', type: 'button', text: '导出' });
+        restore.addEventListener('click', function () { restoreBackup(item.id); });
+        exportBtn.addEventListener('click', function () { exportBackup(item.id); });
+        list.appendChild(el('div', { class: 'backup-row' }, [
+          el('div', { class: 'backup-meta' }, [
+            el('strong', { text: fmtBackupTime(item.createdAt) }),
+            el('span', { text: '任务 ' + item.taskCount + ' · 日志 ' + item.logDays + ' 天' })
+          ]),
+          el('div', { class: 'backup-actions' }, [restore, exportBtn])
+        ]));
+      });
+    } catch (e) {
+      D['backup-status'].textContent = '备份列表读取失败：' + (e && e.message || e);
+    }
+  }
+
+  async function restoreBackup(id) {
+    if (!window.confirm('恢复后任务、日报与设置将回到该恢复点，同步会暂停。继续？')) return;
+    var res = await apiCall('restoreBackup', { ok: false }, id);
+    if (!res || !res.ok) { showToast((res && res.error) || '恢复失败', 'error'); return; }
+    state.settings.syncPaused = true;
+    showToast('已恢复；同步已暂停，请在设置中确认后恢复同步', 'ok');
+    await reloadAllData();
+  }
+
+  async function exportBackup(id) {
+    var include = window.confirm('导出是否包含同步码？选择“取消”将脱敏导出。');
+    var res = await apiCall('exportBackup', { ok: false }, id, include);
+    if (!res || !res.ok) { showToast((res && res.error) || '导出失败', 'error'); return; }
+    showToast('备份已导出', 'ok');
+  }
+
+  async function importBackupFile(file) {
+    var text = await file.text();
+    var res = await apiCall('importBackup', { ok: false }, text);
+    if (!res || !res.ok) { showToast((res && res.error) || '导入失败', 'error'); return; }
+    state.settings.syncPaused = true;
+    showToast('导入完成；同步已暂停', 'ok');
+    await reloadAllData();
+  }
+
+  async function reloadAllData() {
+    state.settings = mergeSettings(await apiCall('loadSettings', state.settings));
+    state.tasks = normalizeTasks(await apiCall('loadTasks', state.tasks));
+    state.logs = (await apiCall('loadLogs', state.logs)) || {};
+    renderHeader();
+    renderTasks();
+    renderWidget();
+    renderDaily();
+    renderWeekly();
+    renderSettings();
+    applyWidgetStyle();
+    renderSyncArea();
+  }
+
+  function applyDataStatus(status) {
+    if (!D['data-error']) return;
+    var corrupt = ['tasks', 'logs', 'settings'].filter(function (key) {
+      return status && status[key] && status[key].corrupt;
+    });
+    D['data-error'].hidden = corrupt.length === 0;
+    if (corrupt.length) {
+      D['data-error-text'].textContent = '损坏文件：' + corrupt.join(', ') + '；原文件未被覆盖。';
+    }
+  }
+
   function renderSettings() {
     var settings = state.settings;
 
@@ -1332,6 +1426,7 @@
     }
     renderVersion();
     renderSyncArea();
+    renderBackupArea();
   }
 
   // ---------- 多设备同步（同步码） ----------
@@ -1345,6 +1440,7 @@
   }
 
   function syncStatusText() {
+    if (state.settings.syncPaused) return '同步已暂停（恢复备份后）';
     if (!state.settings.syncCode || !state.settings.serverUrl) return '未配置同步';
     var pendingTxt = state.syncPending > 0 ? ('（待推送 ' + state.syncPending + ' 条）') : '';
     if (state.syncState === 'syncing') return '同步中…' + pendingTxt;
@@ -1361,12 +1457,14 @@
       ? SC.displaySyncCode(state.settings.syncCode) : '';
     D['sync-status'].textContent = syncStatusText();
     var cls = 'set-tip';
-    if (state.syncState === 'error') cls += ' sync-err';
+    if (state.settings.syncPaused) cls += ' sync-paused';
+    else if (state.syncState === 'error') cls += ' sync-err';
     else if (state.syncState === 'syncing') cls += ' sync-busy';
     else if (state.syncState === 'offline') cls += ' sync-offline';
     else if (state.lastSyncAt) cls += ' sync-ok';
     D['sync-status'].className = cls;
     D['sync-clear'].hidden = !state.settings.syncCode;
+    if (D['sync-resume']) D['sync-resume'].hidden = !state.settings.syncPaused;
     if (D['sync-now']) D['sync-now'].disabled = (state.syncState === 'syncing');
   }
 
@@ -1538,6 +1636,44 @@
     D['sync-copy'].addEventListener('click', copySyncCode);
     D['sync-clear'].addEventListener('click', clearSyncCode);
     if (D['sync-now']) D['sync-now'].addEventListener('click', onManualSync);
+    if (D['sync-resume']) {
+      D['sync-resume'].addEventListener('click', async function () {
+        var res = await apiCall('resumeSync', { ok: false });
+        if (!res || !res.ok) { showToast('恢复同步失败', 'error'); return; }
+        state.settings.syncPaused = false;
+        renderSyncArea();
+        showToast('同步已恢复', 'ok');
+      });
+    }
+
+    D['backup-enabled'].addEventListener('change', async function () {
+      state.settings.backup = Object.assign({}, state.settings.backup, {
+        enabled: D['backup-enabled'].checked
+      });
+      await apiCall('saveSettings', null, state.settings);
+      renderBackupArea();
+    });
+    D['backup-create'].addEventListener('click', async function () {
+      var res = await apiCall('createBackup', { ok: false });
+      if (!res || !res.ok) { showToast((res && res.error) || '备份失败', 'error'); return; }
+      showToast(res.created ? '已创建恢复点' : '内容未变化，跳过', 'ok');
+      renderBackupArea();
+    });
+    D['backup-import'].addEventListener('click', function () { D['backup-file'].click(); });
+    D['backup-file'].addEventListener('change', function () {
+      if (D['backup-file'].files[0]) importBackupFile(D['backup-file'].files[0]);
+      D['backup-file'].value = '';
+    });
+    D['backup-open'].addEventListener('click', function () { apiCall('openBackupDir', null); });
+    D['data-error-restore'].addEventListener('click', async function () {
+      var res = await apiCall('listBackups', { ok: false, items: [] });
+      if (!res || !res.items.length) { showToast('没有可用备份', 'error'); return; }
+      restoreBackup(res.items[0].id);
+    });
+    D['data-error-export'].addEventListener('click', function () {
+      showToast('请打开 userData 目录手动备份原文件', 'warn');
+    });
+
     D['w-prev'].addEventListener('click', function () {
       if (state.settings.widget.expanded) shiftMonth(-1); else shiftWeek(-1);
     });
@@ -1703,7 +1839,10 @@
       'set-launch', 'set-tray', 'set-hotkey', 'set-reset-pos', 'set-opacity', 'set-opacity-val', 'set-scale', 'set-scale-val', 'btn-quit', 'toast',
       'app-version', 'check-update',
       'sync-block', 'sync-server', 'sync-code', 'sync-status',
-      'sync-apply', 'sync-generate', 'sync-copy', 'sync-clear', 'sync-now'
+      'sync-apply', 'sync-generate', 'sync-copy', 'sync-clear', 'sync-now', 'sync-resume',
+      'backup-block', 'backup-enabled', 'backup-status', 'backup-create', 'backup-import',
+      'backup-open', 'backup-list', 'backup-file',
+      'data-error', 'data-error-text', 'data-error-restore', 'data-error-export'
     ].forEach(function (id) {
       D[id] = $(id);
     });
@@ -1758,8 +1897,11 @@
         if (!s) return;
         if (s.state) {
           state.syncState = s.state;
-          if (s.state === 'synced') {
+          if (s.state === 'paused') {
+            state.settings.syncPaused = true;
+          } else if (s.state === 'synced') {
             state.syncError = '';
+            state.settings.syncPaused = false;
             if (s.lastSyncAt) state.lastSyncAt = s.lastSyncAt;
           } else if (s.state === 'error') {
             state.syncError = s.error || '同步失败';
@@ -1781,6 +1923,12 @@
     }
 
     // 冲突提示：纯客户端检测到的「未确认本地改动被另一台设备覆盖」
+    if (typeof bridge.onDataStatus === 'function') {
+      bridge.onDataStatus(applyDataStatus);
+    }
+    if (typeof bridge.getDataStatus === 'function') {
+      bridge.getDataStatus().then(applyDataStatus).catch(function () {});
+    }
     if (typeof bridge.onSyncConflict === 'function') {
       bridge.onSyncConflict(function (info) {
         if (!info) return;

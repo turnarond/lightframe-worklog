@@ -269,9 +269,26 @@
           <button class="btn-mini" id="sync-generate" type="button">生成新码</button>
           <button class="btn-mini" id="sync-copy" type="button">复制</button>
           <button class="btn-mini" id="sync-now" type="button">立即同步</button>
+          <button class="btn-mini" id="sync-resume" type="button" hidden>恢复同步</button>
           <button class="btn-mini danger" id="sync-clear" type="button" hidden>退出同步</button>
         </div>
         <p class="set-tip">填入同一同步码的设备共享任务 / 日报 / 偏好。请自行保存同步码：丢失后无法取回云端数据，换码等于换空间。</p>
+      </section>
+
+      <section class="set-block" id="backup-block">
+        <h3>数据与备份</h3>
+        <div class="set-row">
+          <span class="lbl">自动备份</span>
+          <input type="checkbox" class="switch" id="backup-enabled" aria-label="自动备份" />
+        </div>
+        <p class="set-tip" id="backup-status">加载中…</p>
+        <div class="backup-actions">
+          <button class="btn-mini" id="backup-create" type="button">立即备份</button>
+          <button class="btn-mini" id="backup-import" type="button">导入备份</button>
+          <button class="btn-mini" id="backup-open" type="button">打开备份目录</button>
+        </div>
+        <div id="backup-list" class="backup-list"></div>
+        <input type="file" id="backup-file" accept=".json,application/json" hidden />
       </section>
 
       <button class="btn-quit" id="btn-quit" type="button">退出应用</button>
@@ -281,6 +298,15 @@
         <button class="btn-link" id="check-update" type="button">检查更新</button>
       </footer>
     </div>
+  </div>
+</div>
+
+<div class="init-error" id="data-error" hidden>
+  <strong>数据读取失败</strong>
+  <p id="data-error-text">原文件未被覆盖，请从备份恢复或导出原文件。</p>
+  <div class="backup-actions">
+    <button class="btn-mini" id="data-error-restore" type="button">从备份恢复</button>
+    <button class="btn-mini" id="data-error-export" type="button">导出原文件</button>
   </div>
 </div>
 

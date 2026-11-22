@@ -1628,3 +1628,21 @@ body.ready .reveal { opacity: 1; transform: none; }
 #sync-status.sync-err::before { background: var(--p-high); }
 #sync-status.sync-busy::before { background: var(--accent-ink); }
 #sync-status.sync-offline::before { background: var(--p-low); }
+#sync-status.sync-paused { color: var(--p-low); }
+#sync-status.sync-paused::before { background: var(--p-low); }
+
+.backup-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.backup-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.backup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--paper-3);
+}
+.backup-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.backup-meta strong { font-family: var(--mono); font-size: 0.7857rem; }
+.backup-meta span { font-size: 0.7857rem; color: var(--ink-soft); }
