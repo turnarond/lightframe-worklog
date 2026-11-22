@@ -6,6 +6,19 @@
 
 （暂无）
 
+## [2.12.0] - 2026-11-22 · 发布可信度
+
+### Added
+- `scripts/release.js` 发布脚本：预检、干净 worktree `npm ci`、全量门禁、NSIS 构建、
+  `release_gate` 双检与发布材料生成；只打印 `git push` / `tag` / `gh release create`，不自动发布。
+- `tools/verify-update.js` 本地更新下载验证：在解包副本与隔离缓存上演练，断言
+  `UPDATE_DOWNLOADED` 且安装包哈希一致。
+- CI 增加发布预检步骤；新增 `doc/05-运维/` 发布检查单。
+
+### Changed
+- Windows 发布由手工步骤改为脚本驱动，版本三件套与 tag 缺失在预检阶段拦截。
+- 无业务逻辑、数据格式与同步协议变更。
+
 ## [2.11.1] - 2026-11-22 · 运行时完整性修复
 
 ### Fixed
