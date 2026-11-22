@@ -619,9 +619,11 @@ function registerIpc() {
       logsCache = dataStatus.logs.data;
       sendToMain('refresh');
       sendToMain('data:status', dataStatus);
+      sendToMain('sync:status', { state: 'paused' });
       return { ok: true, preRestoreId: result.preRestoreId, restoredFiles: result.restoredFiles, syncPaused: true };
     } catch (err) {
       settings.syncPaused = previousPaused;
+      sendToMain('sync:status', { state: previousPaused ? 'paused' : 'idle' });
       throw err;
     } finally {
       dataBusy = false;
@@ -665,6 +667,7 @@ function registerIpc() {
       logsCache = dataStatus.logs.data;
       sendToMain('refresh');
       sendToMain('data:status', dataStatus);
+      sendToMain('sync:status', { state: 'paused' });
       return {
         ok: true,
         taskCount: parsed.summary.taskCount,
@@ -674,6 +677,7 @@ function registerIpc() {
       };
     } catch (err) {
       settings.syncPaused = previousPaused;
+      sendToMain('sync:status', { state: previousPaused ? 'paused' : 'idle' });
       throw err;
     } finally {
       dataBusy = false;

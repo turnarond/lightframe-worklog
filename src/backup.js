@@ -13,6 +13,28 @@ function shouldAutoBackup(settings) {
   return !(settings && settings.backup && settings.backup.enabled === false);
 }
 
+function settingsForHash(text) {
+  try {
+    const s = JSON.parse(text);
+    if (s && typeof s === 'object') {
+      delete s.lastReminded;
+      if (s.widget && typeof s.widget === 'object') {
+        delete s.widget.rect;
+        if (Object.keys(s.widget).length === 0) delete s.widget;
+      }
+      return JSON.stringify(s);
+    }
+  } catch (e) { /* 保留原文由后续校验处理 */ }
+  return text;
+}
+
+function safeId(id) {
+  if (typeof id !== 'string' || !/^[0-9]{8}-[0-9]{6}-[0-9]{3}(-[0-9]+)?$/.test(id)) {
+    throw new Error('恢复点 ID 非法');
+  }
+  return id;
+}
+
 function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
@@ -126,7 +148,10 @@ function createBackupManager(options) {
         contents[name] = text === null ? 'null' : text;
       }
       if (!any) return { created: false, skipped: 'empty' };
-      const setHash = sha256(HASH_FILES.map((name) => sha256(contents[name])).join(''));
+      const setHash = sha256(HASH_FILES.map((name) => {
+        const text = name === 'settings.json' ? settingsForHash(contents[name]) : contents[name];
+        return sha256(text);
+      }).join(''));
       const existing = await list();
       if (existing.length && existing[0].setHash === setHash) {
         return { created: false, setHash, skipped: 'unchanged' };
@@ -226,6 +251,7 @@ function createBackupManager(options) {
   }
 
   async function readMeta(id) {
+    safeId(id);
     const dir = path.join(backupDir, id);
     const metaPath = path.join(dir, 'meta.json');
     if (!fs.existsSync(metaPath)) throw new Error('恢复点不存在');
@@ -355,6 +381,8 @@ module.exports = {
   DATA_FILES,
   HASH_FILES,
   createBackupManager,
+  safeId,
+  settingsForHash,
   shouldAutoBackup,
   sha256,
   localDay

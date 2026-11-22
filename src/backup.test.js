@@ -161,3 +161,24 @@ test('自动备份开关默认开，显式 false 才关闭', () => {
   assert.equal(shouldAutoBackup({ backup: { enabled: true } }), true);
   assert.equal(shouldAutoBackup({ backup: { enabled: false } }), false);
 });
+
+test('仅挂件位置与提醒去重变化不生成恢复点', async () => {
+  const { root, dataDir, backupDir } = await setup();
+  const manager = createBackupManager({ dataDir, backupDir, appVersion: '2.11.0' });
+  await manager.beforeWrite('first');
+  const settingsPath = path.join(dataDir, 'settings.json');
+  const settings = JSON.parse(await fsp.readFile(settingsPath, 'utf8'));
+  settings.lastReminded = { todoHour: '2026-11-22-18' };
+  settings.widget = { rect: { x: 10, y: 20 } };
+  await fsp.writeFile(settingsPath, JSON.stringify(settings));
+  const second = await manager.beforeWrite('layout');
+  assert.equal(second.created, false);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('非法恢复点 ID 被拒绝', async () => {
+  const { root, dataDir, backupDir } = await setup();
+  const manager = createBackupManager({ dataDir, backupDir, appVersion: '2.11.0' });
+  await assert.rejects(() => manager.restore('../outside'), /恢复点 ID 非法/);
+  fs.rmSync(root, { recursive: true, force: true });
+});

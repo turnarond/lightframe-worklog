@@ -1331,12 +1331,15 @@
       res.items.forEach(function (item) {
         var restore = el('button', { class: 'btn-mini', type: 'button', text: '恢复' });
         var exportBtn = el('button', { class: 'btn-mini ghost', type: 'button', text: '导出' });
-        restore.addEventListener('click', function () { restoreBackup(item.id); });
+        restore.addEventListener('click', function () { restoreBackup(item.id, item); });
         exportBtn.addEventListener('click', function () { exportBackup(item.id); });
         list.appendChild(el('div', { class: 'backup-row' }, [
           el('div', { class: 'backup-meta' }, [
             el('strong', { text: fmtBackupTime(item.createdAt) }),
-            el('span', { text: '任务 ' + item.taskCount + ' · 日志 ' + item.logDays + ' 天' })
+            el('span', {
+              text: '任务 ' + item.taskCount + ' · 日志 ' + item.logDays + ' 天' +
+                (item.hasSyncCode ? ' · 含同步码' : ' · 脱敏')
+            })
           ]),
           el('div', { class: 'backup-actions' }, [restore, exportBtn])
         ]));
@@ -1346,8 +1349,12 @@
     }
   }
 
-  async function restoreBackup(id) {
-    if (!window.confirm('恢复后任务、日报与设置将回到该恢复点，同步会暂停。继续？')) return;
+  async function restoreBackup(id, item) {
+    var info = item
+      ? '任务 ' + item.taskCount + ' 项、日志 ' + item.logDays + ' 天' +
+        (item.hasSyncCode ? '、含同步码' : '、不含同步码')
+      : '任务、日报与设置';
+    if (!window.confirm('将恢复 ' + info + '；同步会暂停。继续？')) return;
     var res = await apiCall('restoreBackup', { ok: false }, id);
     if (!res || !res.ok) { showToast((res && res.error) || '恢复失败', 'error'); return; }
     state.settings.syncPaused = true;
@@ -1674,7 +1681,7 @@
     D['data-error-restore'].addEventListener('click', async function () {
       var res = await apiCall('listBackups', { ok: false, items: [] });
       if (!res || !res.items.length) { showToast('没有可用备份', 'error'); return; }
-      restoreBackup(res.items[0].id);
+      restoreBackup(res.items[0].id, res.items[0]);
     });
     D['data-error-export'].addEventListener('click', async function () {
       var res = await apiCall('exportCorrupt', { ok: false });
