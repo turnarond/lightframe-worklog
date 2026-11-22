@@ -8,10 +8,6 @@ function renderAppUpdateYml({ url, cacheName }) {
   return 'provider: generic\nurl: ' + url + '\nupdaterCacheDirName: ' + cacheName + '\n';
 }
 
-function installerArgs(testRoot) {
-  return ['/S', '/D=' + path.win32.join(testRoot, 'app')];
-}
-
 function assertSafeTestRoot({ testRoot, dailyInstallPath, dailyUserDataPath }) {
   const errs = [];
   const root = path.resolve(testRoot);
@@ -78,6 +74,6 @@ function parseVerifyUpdateArgs(argv) {
 }
 
 module.exports = {
-  renderAppUpdateYml, installerArgs, assertSafeTestRoot, findDownloadedInstaller,
+  renderAppUpdateYml, assertSafeTestRoot, findDownloadedInstaller,
   parseLatestYml, parseVerifyUpdateArgs
 };

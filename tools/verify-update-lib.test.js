@@ -16,11 +16,6 @@ test('renderAppUpdateYml 使用本地 generic feed', () => {
   assert.match(y, /updaterCacheDirName: lw-e2e/);
 });
 
-test('installerArgs 的 /D 必须是最后参数（Windows-only）', winOnly, () => {
-  const expected = path.win32.join('C:\\Temp', 'lw-update', 'app');
-  assert.deepStrictEqual(lib.installerArgs('C:\\Temp\\lw-update'), ['/S', '/D=' + expected]);
-});
-
 test('assertSafeTestRoot 拒绝日常安装（Windows-only）', winOnly, () => {
   const errs = lib.assertSafeTestRoot({
     testRoot: 'C:\\Program Files\\lightframe-worklog',
