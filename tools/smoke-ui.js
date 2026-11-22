@@ -33,13 +33,18 @@ const TASK = {
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const withTimeout = (promise, ms, label) => Promise.race([
+  promise,
+  new Promise((resolve, reject) => setTimeout(() => reject(new Error('超时: ' + label)), ms))
+]);
 
 async function connect() {
   let page = null;
   for (let i = 0; i < 40; i++) {
     await sleep(500);
     try {
-      const list = await (await fetch('http://127.0.0.1:' + PORT + '/json/list')).json();
+      const res = await fetch('http://127.0.0.1:' + PORT + '/json/list', { signal: AbortSignal.timeout(1500) });
+      const list = await res.json();
       page = list.find((t) => t.type === 'page' && t.url.includes('index.html'));
       if (page) break;
     } catch (e) { /* 端口未就绪 */ }
@@ -47,10 +52,10 @@ async function connect() {
   if (!page) throw new Error('CDP 页面未就绪（请先执行 npm run dist）');
 
   const ws = new WebSocket(page.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => {
+  await withTimeout(new Promise((resolve, reject) => {
     ws.addEventListener('open', resolve, { once: true });
     ws.addEventListener('error', reject, { once: true });
-  });
+  }), 15000, 'WebSocket 打开');
   let id = 0;
   const pending = new Map();
   const consoleErrors = [];
@@ -64,11 +69,11 @@ async function connect() {
       consoleErrors.push('异常: ' + m.params.exceptionDetails.text);
     }
   });
-  const send = (method, params) => new Promise((resolve) => {
+  const send = (method, params) => withTimeout(new Promise((resolve) => {
     id++;
     pending.set(id, resolve);
     ws.send(JSON.stringify({ id: id, method: method, params: params || {} }));
-  });
+  }), 15000, 'CDP ' + method);
   const ev = async (expression) => {
     const r = await send('Runtime.evaluate', {
       expression: expression, awaitPromise: true, returnByValue: true
@@ -83,20 +88,38 @@ async function connect() {
 
 async function main() {
   fs.mkdirSync(SMOKE_USER_DATA, { recursive: true });
+  const appLog = [];
   const child = spawn(EXE, [
     '--user-data-dir=' + SMOKE_USER_DATA,
     '--remote-debugging-port=' + PORT
-  ], { stdio: 'ignore', windowsHide: true });
+  ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  const collect = (prefix) => (d) => {
+    String(d).split(/\r?\n/).filter(Boolean).forEach((line) => {
+      appLog.push(prefix + line);
+      if (appLog.length > 200) appLog.shift();
+    });
+  };
+  child.stdout.on('data', collect('[app:out] '));
+  child.stderr.on('data', collect('[app:err] '));
+  const watchdog = setTimeout(function () {
+    console.error('WATCHDOG 180s 未完成，应用日志：');
+    console.error(appLog.slice(-80).join('\n'));
+    try { execSync('taskkill /pid ' + child.pid + ' /t /f', { stdio: 'ignore' }); } catch (e) { /* 已退出 */ }
+    process.exit(3);
+  }, 180000);
   let session = null;
   let origTasks = '[]';
   let origSettings = '{}';
   const results = {};
 
   try {
+    console.log('STEP 等待 CDP');
     session = await connect();
+    console.log('STEP CDP 已连接');
     const { send, ev, consoleErrors } = session;
     await send('Runtime.enable');
     await send('Page.enable');
+    console.log('STEP CDP 域已启用');
     // 唯一文档标记：Page.reload 后旧文档同样有 cat-chips，必须等新文档落地再断言
     const docToken = 'smoke-' + process.pid + '-' + Date.now();
     // 每次文档加载前注入错误收集：unhandledrejection 不会被 Runtime.exceptionThrown 捕获
@@ -114,10 +137,14 @@ async function main() {
 
     origTasks = await ev('window.api.loadTasks().then(function (t) { return JSON.stringify(t || []); })');
     origSettings = await ev('window.api.loadSettings().then(function (s) { return JSON.stringify(s || {}); })');
+    console.log('STEP 原数据读取完成');
     await ev('window.api.saveTasks([' + JSON.stringify(TASK) + ']).then(function () { return true; })');
+    console.log('STEP 任务写入完成');
     // 预置一个非默认字号，验证渲染端合并器不会在重启后把它丢掉
     await ev("(async function(){var s=await window.api.loadSettings();s.widget=s.widget||{};s.widget.scale=1.25;s.widget.expanded=false;await window.api.saveSettings(s);return true;})()");
+    console.log('STEP 设置写入完成');
     await send('Page.reload', { ignoreCache: true });
+    console.log('STEP reload 已发出');
     // 等新文档 init 落地：唯一 token + body.ready，二者缺一不可
     let docReady = false;
     for (let i = 0; i < 40; i++) {
@@ -126,6 +153,7 @@ async function main() {
         JSON.stringify(docToken) + " && document.body.classList.contains('ready')");
       if (docReady) break;
     }
+    console.log('STEP 新文档就绪=' + docReady);
     if (!docReady) {
       console.log('诊断: 新文档未就绪', await ev("JSON.stringify({readyState:document.readyState,token:window.__smokeDocToken,bodyClass:document.body.className})"));
     }
@@ -226,6 +254,12 @@ async function main() {
     results['无 console.error'] = consoleErrors.length === 0;
     if (consoleErrors.length) console.log('控制台错误:', consoleErrors.join(' | '));
   } finally {
+    clearTimeout(watchdog);
+    if (appLog.length) {
+      console.log('APP_LOG_BEGIN');
+      console.log(appLog.slice(-80).join('\n'));
+      console.log('APP_LOG_END');
+    }
     if (session) {
       try {
         await session.ev('window.api.saveTasks(' + origTasks + ').then(function () { return true; })');
