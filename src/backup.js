@@ -179,7 +179,130 @@ function createBackupManager(options) {
     return total;
   }
 
-  return { beforeWrite, list, prune, spaceUsage };
+  async function writeAtomic(file, text) {
+    const tmp = file + '.tmp';
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    await fsp.writeFile(tmp, text, 'utf8');
+    await fsp.rename(tmp, file);
+  }
+
+  function checksumOf(value) {
+    return sha256(JSON.stringify(value));
+  }
+
+  function maskSettings(text, includeSecrets) {
+    const s = JSON.parse(text);
+    if (!includeSecrets) {
+      s.syncCode = '';
+      s.serverUrl = '';
+    }
+    return s;
+  }
+
+  async function restoreSet(id) {
+    const dir = path.join(backupDir, id);
+    const metaPath = path.join(dir, 'meta.json');
+    if (!fs.existsSync(metaPath)) throw new Error('恢复点不存在');
+    const pre = await beforeWrite('pre-restore');
+    const files = ['tasks.json', 'dailyLogs.json', 'settings.json'];
+    const originals = {};
+    const restored = [];
+    try {
+      for (const name of files) {
+        const text = await fsp.readFile(path.join(dir, name), 'utf8');
+        const target = path.join(dataDir, name);
+        originals[name] = await fsp.readFile(target, 'utf8').catch(() => null);
+        await writeAtomic(target, text);
+        restored.push(name);
+      }
+      return { preRestoreId: pre.id || '', restoredFiles: restored };
+    } catch (err) {
+      for (const name of restored) {
+        const target = path.join(dataDir, name);
+        if (originals[name] === null) await fsp.rm(target, { force: true });
+        else await writeAtomic(target, originals[name]);
+      }
+      throw err;
+    }
+  }
+
+  async function exportBundle(id, opts) {
+    const includeSecrets = !!(opts && opts.includeSecrets);
+    const dir = path.join(backupDir, id);
+    const meta = JSON.parse(await fsp.readFile(path.join(dir, 'meta.json'), 'utf8'));
+    const files = {
+      tasks: JSON.parse(await fsp.readFile(path.join(dir, 'tasks.json'), 'utf8')),
+      dailyLogs: JSON.parse(await fsp.readFile(path.join(dir, 'dailyLogs.json'), 'utf8')),
+      settings: maskSettings(await fsp.readFile(path.join(dir, 'settings.json'), 'utf8'), includeSecrets),
+      syncmeta: JSON.parse(await fsp.readFile(path.join(dir, 'syncmeta.json'), 'utf8'))
+    };
+    const checksums = {};
+    Object.keys(files).forEach((key) => { checksums[key] = checksumOf(files[key]); });
+    return {
+      text: JSON.stringify({
+        format: 'lightframe-backup',
+        formatVersion: 1,
+        exportedAt: new Date(now()).toISOString(),
+        appVersion,
+        files,
+        checksums
+      }, null, 2),
+      filename: 'lightframe-backup-' + meta.id + '.json'
+    };
+  }
+
+  async function importBundle(text) {
+    const bundle = JSON.parse(text);
+    if (!bundle || bundle.format !== 'lightframe-backup' || bundle.formatVersion !== 1) {
+      throw new Error('不是受支持的备份文件');
+    }
+    for (const key of ['tasks', 'dailyLogs', 'settings', 'syncmeta']) {
+      if (!(key in bundle.files)) throw new Error('备份缺少 ' + key);
+      if (checksumOf(bundle.files[key]) !== bundle.checksums[key]) {
+        throw new Error(key + ' 校验失败');
+      }
+    }
+    return {
+      bundle,
+      summary: {
+        taskCount: Array.isArray(bundle.files.tasks) ? bundle.files.tasks.length : 0,
+        logDays: Object.keys(bundle.files.dailyLogs || {}).length,
+        hasSyncCode: !!(bundle.files.settings && bundle.files.settings.syncCode)
+      }
+    };
+  }
+
+  async function restoreBundle(bundle) {
+    const pre = await beforeWrite('pre-restore');
+    const writes = [
+      ['tasks.json', bundle.files.tasks],
+      ['dailyLogs.json', bundle.files.dailyLogs],
+      ['settings.json', bundle.files.settings]
+    ];
+    const originals = {};
+    const done = [];
+    try {
+      for (const [name, value] of writes) {
+        const target = path.join(dataDir, name);
+        originals[name] = await fsp.readFile(target, 'utf8').catch(() => null);
+        await writeAtomic(target, JSON.stringify(value, null, 2));
+        done.push(name);
+      }
+      return { preRestoreId: pre.id || '', restoredFiles: done };
+    } catch (err) {
+      for (const name of done) {
+        const target = path.join(dataDir, name);
+        if (originals[name] === null) await fsp.rm(target, { force: true });
+        else await writeAtomic(target, originals[name]);
+      }
+      throw err;
+    }
+  }
+
+  return {
+    beforeWrite, list, prune, spaceUsage,
+    restore: restoreSet, exportBundle, importBundle, restoreBundle, checksumOf
+  };
 }
 
 module.exports = {

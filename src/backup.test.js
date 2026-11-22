@@ -72,3 +72,38 @@ test('轮转保留最近 10 份与每日代表', async () => {
   assert.ok(list.length <= 17, '最多保留 10 + 7，实际 ' + list.length);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('restore 写回三份文件并生成 pre-restore', async () => {
+  const { root, dataDir, backupDir } = await setup();
+  const manager = createBackupManager({ dataDir, backupDir, appVersion: '2.11.0' });
+  const first = await manager.beforeWrite('first');
+  await fsp.writeFile(path.join(dataDir, 'tasks.json'), JSON.stringify([{ id: 'new', title: '新任务' }]));
+  const restored = await manager.restore(first.id);
+  assert.ok(restored.preRestoreId);
+  const tasks = JSON.parse(await fsp.readFile(path.join(dataDir, 'tasks.json'), 'utf8'));
+  assert.equal(tasks[0].id, 't1');
+  const list = await manager.list();
+  assert.ok(list.some((m) => m.reason === 'pre-restore'));
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('export 默认脱敏同步码', async () => {
+  const { root, dataDir, backupDir } = await setup();
+  const manager = createBackupManager({ dataDir, backupDir, appVersion: '2.11.0' });
+  const first = await manager.beforeWrite('first');
+  const out = await manager.exportBundle(first.id, { includeSecrets: false });
+  const bundle = JSON.parse(out.text);
+  assert.equal(bundle.files.settings.syncCode, '');
+  assert.equal(bundle.files.settings.serverUrl, '');
+  const raw = await manager.exportBundle(first.id, { includeSecrets: true });
+  assert.equal(JSON.parse(raw.text).files.settings.syncCode, 'ABCD-EFGH-JKLM-NPQR');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('import 校验失败时不写盘', async () => {
+  const { root, dataDir, backupDir } = await setup();
+  const manager = createBackupManager({ dataDir, backupDir, appVersion: '2.11.0' });
+  const bad = JSON.stringify({ format: 'lightframe-backup', formatVersion: 1, files: {}, checksums: {} });
+  await assert.rejects(() => manager.importBundle(bad));
+  fs.rmSync(root, { recursive: true, force: true });
+});
