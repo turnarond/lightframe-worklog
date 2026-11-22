@@ -6,6 +6,12 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const DATA_FILES = ['tasks.json', 'dailyLogs.json', 'settings.json', 'syncmeta.json'];
+// syncmeta 只是同步游标/时间，不参与去重；否则每 30s 心跳会冲掉最近 10 份业务快照
+const HASH_FILES = ['tasks.json', 'dailyLogs.json', 'settings.json'];
+
+function shouldAutoBackup(settings) {
+  return !(settings && settings.backup && settings.backup.enabled === false);
+}
 
 function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
@@ -120,7 +126,7 @@ function createBackupManager(options) {
         contents[name] = text === null ? 'null' : text;
       }
       if (!any) return { created: false, skipped: 'empty' };
-      const setHash = sha256(DATA_FILES.map((name) => sha256(contents[name])).join(''));
+      const setHash = sha256(HASH_FILES.map((name) => sha256(contents[name])).join(''));
       const existing = await list();
       if (existing.length && existing[0].setHash === setHash) {
         return { created: false, setHash, skipped: 'unchanged' };
@@ -204,10 +210,32 @@ function createBackupManager(options) {
     return s;
   }
 
-  async function restoreSet(id) {
+  async function verifySet(dir, meta) {
+    if (!meta || !meta.files) throw new Error('恢复点缺少文件校验信息');
+    for (const name of DATA_FILES) {
+      const expected = meta.files[name];
+      if (!expected || typeof expected.sha256 !== 'string') {
+        throw new Error('恢复点缺少 ' + name + ' 校验信息');
+      }
+      const text = await fsp.readFile(path.join(dir, name), 'utf8');
+      if (sha256(text) !== expected.sha256 || Buffer.byteLength(text) !== expected.size) {
+        throw new Error('恢复点校验失败: ' + name);
+      }
+    }
+    return true;
+  }
+
+  async function readMeta(id) {
     const dir = path.join(backupDir, id);
     const metaPath = path.join(dir, 'meta.json');
     if (!fs.existsSync(metaPath)) throw new Error('恢复点不存在');
+    const meta = JSON.parse(await fsp.readFile(metaPath, 'utf8'));
+    await verifySet(dir, meta);
+    return { dir, meta };
+  }
+
+  async function restoreSet(id) {
+    const { dir } = await readMeta(id);
     const pre = await beforeWrite('pre-restore');
     const files = ['tasks.json', 'dailyLogs.json', 'settings.json'];
     const originals = {};
@@ -234,8 +262,7 @@ function createBackupManager(options) {
 
   async function exportBundle(id, opts) {
     const includeSecrets = !!(opts && opts.includeSecrets);
-    const dir = path.join(backupDir, id);
-    const meta = JSON.parse(await fsp.readFile(path.join(dir, 'meta.json'), 'utf8'));
+    const { dir, meta } = await readMeta(id);
     const files = {
       tasks: JSON.parse(await fsp.readFile(path.join(dir, 'tasks.json'), 'utf8')),
       dailyLogs: JSON.parse(await fsp.readFile(path.join(dir, 'dailyLogs.json'), 'utf8')),
@@ -326,7 +353,9 @@ function createBackupManager(options) {
 
 module.exports = {
   DATA_FILES,
+  HASH_FILES,
   createBackupManager,
+  shouldAutoBackup,
   sha256,
   localDay
 };

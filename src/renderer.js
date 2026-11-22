@@ -1364,6 +1364,12 @@
 
   async function importBackupFile(file) {
     var text = await file.text();
+    var preview = await apiCall('previewImport', { ok: false }, text);
+    if (!preview || !preview.ok) { showToast((preview && preview.error) || '导入文件校验失败', 'error'); return; }
+    var s = preview.summary || {};
+    var msg = '将覆盖任务（' + (s.taskCount || 0) + ' 项）与日报（' + (s.logDays || 0) + ' 天），同步会暂停。';
+    if (!s.hasSyncCode) msg += ' 该备份未包含同步码，导入后会清空当前同步码。';
+    if (!window.confirm(msg + ' 继续？')) return;
     var res = await apiCall('importBackup', { ok: false }, text);
     if (!res || !res.ok) { showToast((res && res.error) || '导入失败', 'error'); return; }
     state.settings.syncPaused = true;

@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const fsp = fs.promises;
 const os = require('node:os');
 const path = require('node:path');
-const { createBackupManager, DATA_FILES } = require('./backup.js');
+const { createBackupManager, DATA_FILES, shouldAutoBackup } = require('./backup.js');
 
 async function setup() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lw-backup-'));
@@ -106,4 +106,58 @@ test('import 校验失败时不写盘', async () => {
   const bad = JSON.stringify({ format: 'lightframe-backup', formatVersion: 1, files: {}, checksums: {} });
   await assert.rejects(() => manager.importBundle(bad));
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('syncmeta 心跳不生成新恢复点', async () => {
+  const { root, dataDir, backupDir } = await setup();
+  const manager = createBackupManager({ dataDir, backupDir, appVersion: '2.11.0' });
+  const first = await manager.beforeWrite('first');
+  assert.equal(first.created, true);
+  await fsp.writeFile(path.join(dataDir, 'syncmeta.json'), JSON.stringify({ lastSyncAt: Date.now() }));
+  const second = await manager.beforeWrite('heartbeat');
+  assert.equal(second.created, false);
+  assert.equal((await manager.list()).length, 1);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('同毫秒多次写入生成不同恢复点', async () => {
+  const { root, dataDir, backupDir } = await setup();
+  const manager = createBackupManager({
+    dataDir, backupDir, appVersion: '2.11.0', now: () => 1700000000000
+  });
+  await manager.beforeWrite('first');
+  await fsp.writeFile(path.join(dataDir, 'tasks.json'), JSON.stringify([{ id: 't2', title: '任务二' }]));
+  await manager.beforeWrite('second');
+  const list = await manager.list();
+  assert.equal(list.length, 2);
+  assert.notEqual(list[0].id, list[1].id);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('恢复点文件被篡改时拒绝恢复', async () => {
+  const { root, dataDir, backupDir } = await setup();
+  const manager = createBackupManager({ dataDir, backupDir, appVersion: '2.11.0' });
+  const point = await manager.beforeWrite('first');
+  await fsp.appendFile(path.join(backupDir, point.id, 'tasks.json'), ' ');
+  await assert.rejects(() => manager.restore(point.id), /恢复点校验失败/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('导出→导入→恢复 roundtrip', async () => {
+  const { root, dataDir, backupDir } = await setup();
+  const manager = createBackupManager({ dataDir, backupDir, appVersion: '2.11.0' });
+  const point = await manager.beforeWrite('first');
+  const out = await manager.exportBundle(point.id, { includeSecrets: true });
+  await fsp.writeFile(path.join(dataDir, 'tasks.json'), JSON.stringify([{ id: 'other', title: '其他' }]));
+  const parsed = await manager.importBundle(out.text);
+  await manager.restoreBundle(parsed.bundle);
+  const tasks = JSON.parse(await fsp.readFile(path.join(dataDir, 'tasks.json'), 'utf8'));
+  assert.equal(tasks[0].id, 't1');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('自动备份开关默认开，显式 false 才关闭', () => {
+  assert.equal(shouldAutoBackup({}), true);
+  assert.equal(shouldAutoBackup({ backup: { enabled: true } }), true);
+  assert.equal(shouldAutoBackup({ backup: { enabled: false } }), false);
 });

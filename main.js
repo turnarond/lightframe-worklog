@@ -24,7 +24,7 @@ const {
   createTaskStore, createLogStore, createSettingsStore, createSyncMetaStore,
   defaultSyncMeta, DEFAULT_SETTINGS
 } = require('./src/store.js');
-const { createBackupManager } = require('./src/backup.js');
+const { createBackupManager, shouldAutoBackup } = require('./src/backup.js');
 const { createSyncBridge } = require('./src/syncBridge.js');
 const { normalizeStartupSettings } = require('./src/startupSettings.js');
 const SyncCode = require('./src/syncCode.js');
@@ -81,6 +81,7 @@ let stores = null;
 let syncBridge = null;
 let syncMetaStore = null;
 let backupManager = null;
+let dataBusy = false;
 
 const dataStatus = { tasks: null, logs: null, settings: null };
 
@@ -356,10 +357,16 @@ function applyAllSettings() {
   return applied;
 }
 
+async function persistSettingsStrict() {
+  if (!stores) throw new Error('存储尚未就绪');
+  await stores.settings.save(settings);
+}
+
+// 后台设置写入（窗口移动、提醒去重）失败只记录；用户主动的同步/设置写入走 strict
 function persistSettings() {
-  if (!stores) return Promise.resolve();
-  return stores.settings.save(settings).catch(function (err) {
+  return persistSettingsStrict().catch(function (err) {
     console.warn('[settings] 保存失败：', err && err.message);
+    return false;
   });
 }
 
@@ -435,7 +442,7 @@ async function updateLastSyncAt(ts) {
 }
 
 async function runSync() {
-  if (settings.syncPaused) {
+  if (settings.syncPaused || dataBusy) {
     sendToMain('sync:status', { state: 'paused' });
     return;
   }
@@ -459,6 +466,7 @@ async function runSync() {
 }
 
 function assertWritable(kind) {
+  if (dataBusy) throw new Error('正在恢复数据，请稍候再试');
   const st = dataStatus[kind];
   if (!st || !st.corrupt) return;
   const err = new Error(kind === 'tasks' ? '任务数据损坏，请先从备份恢复'
@@ -501,26 +509,39 @@ function registerIpc() {
 
   ipcMain.handle('settings:save', async function (_event, next) {
     assertWritable('settings');
+    const previous = settings;
     const merged = Object.assign({}, settings, next || {});
     // 壁纸穿透态已移除：清理历史 settings.json 里可能残留的废弃字段
     merged.widget = Object.assign({}, merged.widget || {});
     delete merged.widget.clickThrough;
     settings = merged;
-    await persistSettings();
+    try {
+      await persistSettingsStrict();
+    } catch (err) {
+      settings = previous;
+      throw err;
+    }
     applyAllSettings();
     if (syncBridge) syncBridge.markDirty('prefs');
     return settings;
   });
 
   ipcMain.handle('sync:apply', async function (_event, payload) {
+    assertWritable('settings');
     const code = SyncCode.normalizeSyncCode(payload && payload.code);
     const serverUrl = String((payload && payload.serverUrl) || '').trim().replace(/\/$/, '');
     if (!SyncCode.isValidSyncCode(code)) return { ok: false, error: '同步码格式不正确' };
     if (!serverUrl) return { ok: false, error: '请填写服务器地址' };
+    const previous = { syncCode: settings.syncCode, serverUrl: settings.serverUrl, syncPaused: settings.syncPaused };
     settings.syncCode = code;
     settings.serverUrl = serverUrl;
     settings.syncPaused = false;
-    await persistSettings();
+    try {
+      await persistSettingsStrict();
+    } catch (err) {
+      Object.assign(settings, previous);
+      return { ok: false, error: '保存同步设置失败：' + (err && err.message || err) };
+    }
     if (syncBridge) {
       syncBridge.setAuth(serverUrl, code);
       try { await syncBridge.seedIfFirstSync(); } catch (e) { console.warn('[sync] 首次同步：', e && e.message); }
@@ -530,10 +551,17 @@ function registerIpc() {
   });
 
   ipcMain.handle('sync:clear', async function () {
+    assertWritable('settings');
+    const previous = { syncCode: settings.syncCode, serverUrl: settings.serverUrl };
     settings.syncCode = '';
-    await persistSettings();
+    try {
+      await persistSettingsStrict();
+    } catch (err) {
+      Object.assign(settings, previous);
+      return { ok: false, error: '保存同步设置失败：' + (err && err.message || err) };
+    }
     if (syncBridge) syncBridge.setAuth('', null);
-    sendToMain('sync:status', { ok: true });
+    sendToMain('sync:status', { state: 'idle' });
     return { ok: true };
   });
 
@@ -543,8 +571,15 @@ function registerIpc() {
   });
 
   ipcMain.handle('sync:resume', async function () {
+    assertWritable('settings');
+    const previous = settings.syncPaused;
     settings.syncPaused = false;
-    await persistSettings();
+    try {
+      await persistSettingsStrict();
+    } catch (err) {
+      settings.syncPaused = previous;
+      return { ok: false, error: '保存同步设置失败：' + (err && err.message || err) };
+    }
     runSync();
     return { ok: true };
   });
@@ -559,26 +594,38 @@ function registerIpc() {
   });
 
   ipcMain.handle('backup:create', async function () {
+    if (dataBusy) return { ok: false, error: '正在恢复数据，请稍候再试' };
     const r = await backupManager.beforeWrite('manual');
     return { ok: true, created: r.created, id: r.id || null };
   });
 
   ipcMain.handle('backup:restore', async function (_event, id) {
-    const result = await backupManager.restore(id);
-    const s = await stores.settings.loadWithStatus();
-    dataStatus.settings = s;
-    settings = normalizeStartupSettings(s.data || JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+    if (dataBusy) return { ok: false, error: '正在处理另一个恢复任务' };
+    const previousPaused = settings.syncPaused;
+    dataBusy = true;
     settings.syncPaused = true;
-    await stores.settings.save(settings);
-    await syncMetaStore.save(defaultSyncMeta());
-    dataStatus.tasks = await stores.tasks.loadWithStatus();
-    dataStatus.logs = await stores.logs.loadWithStatus();
-    dataStatus.settings = await stores.settings.loadWithStatus();
-    tasksCache = dataStatus.tasks.data;
-    logsCache = dataStatus.logs.data;
-    sendToMain('refresh');
-    sendToMain('data:status', dataStatus);
-    return { ok: true, preRestoreId: result.preRestoreId, restoredFiles: result.restoredFiles, syncPaused: true };
+    try {
+      const result = await backupManager.restore(id);
+      const s = await stores.settings.loadWithStatus();
+      dataStatus.settings = s;
+      settings = normalizeStartupSettings(s.data || JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+      settings.syncPaused = true;
+      await stores.settings.save(settings);
+      await syncMetaStore.save(defaultSyncMeta());
+      dataStatus.tasks = await stores.tasks.loadWithStatus();
+      dataStatus.logs = await stores.logs.loadWithStatus();
+      dataStatus.settings = await stores.settings.loadWithStatus();
+      tasksCache = dataStatus.tasks.data;
+      logsCache = dataStatus.logs.data;
+      sendToMain('refresh');
+      sendToMain('data:status', dataStatus);
+      return { ok: true, preRestoreId: result.preRestoreId, restoredFiles: result.restoredFiles, syncPaused: true };
+    } catch (err) {
+      settings.syncPaused = previousPaused;
+      throw err;
+    } finally {
+      dataBusy = false;
+    }
   });
 
   ipcMain.handle('backup:export', async function (_event, id, includeSecrets) {
@@ -592,29 +639,45 @@ function registerIpc() {
     return { ok: true, path: picked.filePath };
   });
 
-  ipcMain.handle('backup:import', async function (_event, text) {
+  ipcMain.handle('backup:previewImport', async function (_event, text) {
     const parsed = await backupManager.importBundle(text);
-    const result = await backupManager.restoreBundle(parsed.bundle);
-    const s = await stores.settings.loadWithStatus();
-    dataStatus.settings = s;
-    settings = normalizeStartupSettings(s.data || JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+    return { ok: true, summary: parsed.summary };
+  });
+
+  ipcMain.handle('backup:import', async function (_event, text) {
+    if (dataBusy) return { ok: false, error: '正在处理另一个恢复任务' };
+    const parsed = await backupManager.importBundle(text);
+    const previousPaused = settings.syncPaused;
+    dataBusy = true;
     settings.syncPaused = true;
-    await stores.settings.save(settings);
-    await syncMetaStore.save(defaultSyncMeta());
-    dataStatus.tasks = await stores.tasks.loadWithStatus();
-    dataStatus.logs = await stores.logs.loadWithStatus();
-    dataStatus.settings = await stores.settings.loadWithStatus();
-    tasksCache = dataStatus.tasks.data;
-    logsCache = dataStatus.logs.data;
-    sendToMain('refresh');
-    sendToMain('data:status', dataStatus);
-    return {
-      ok: true,
-      taskCount: parsed.summary.taskCount,
-      logDays: parsed.summary.logDays,
-      preRestoreId: result.preRestoreId,
-      syncPaused: true
-    };
+    try {
+      const result = await backupManager.restoreBundle(parsed.bundle);
+      const s = await stores.settings.loadWithStatus();
+      dataStatus.settings = s;
+      settings = normalizeStartupSettings(s.data || JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+      settings.syncPaused = true;
+      await stores.settings.save(settings);
+      await syncMetaStore.save(defaultSyncMeta());
+      dataStatus.tasks = await stores.tasks.loadWithStatus();
+      dataStatus.logs = await stores.logs.loadWithStatus();
+      dataStatus.settings = await stores.settings.loadWithStatus();
+      tasksCache = dataStatus.tasks.data;
+      logsCache = dataStatus.logs.data;
+      sendToMain('refresh');
+      sendToMain('data:status', dataStatus);
+      return {
+        ok: true,
+        taskCount: parsed.summary.taskCount,
+        logDays: parsed.summary.logDays,
+        preRestoreId: result.preRestoreId,
+        syncPaused: true
+      };
+    } catch (err) {
+      settings.syncPaused = previousPaused;
+      throw err;
+    } finally {
+      dataBusy = false;
+    }
   });
 
   ipcMain.handle('backup:openDir', async function () {
@@ -764,7 +827,10 @@ async function bootstrap() {
     backupDir: path.join(userData, 'backups'),
     appVersion: app.getVersion()
   });
-  const beforeWrite = function () { return backupManager.beforeWrite('write'); };
+  const beforeWrite = function () {
+    if (dataBusy || !shouldAutoBackup(settings)) return Promise.resolve();
+    return backupManager.beforeWrite('write');
+  };
 
   stores = {
     tasks: createTaskStore(path.join(userData, 'tasks.json'), { beforeWrite: beforeWrite }),

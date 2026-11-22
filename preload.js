@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('api', {
   createBackup: function () { return ipcRenderer.invoke('backup:create'); },
   restoreBackup: function (id) { return ipcRenderer.invoke('backup:restore', id); },
   exportBackup: function (id, includeSecrets) { return ipcRenderer.invoke('backup:export', id, includeSecrets); },
+  previewImport: function (text) { return ipcRenderer.invoke('backup:previewImport', text); },
   importBackup: function (text) { return ipcRenderer.invoke('backup:import', text); },
   openBackupDir: function () { return ipcRenderer.invoke('backup:openDir'); },
   exportCorrupt: function () { return ipcRenderer.invoke('backup:exportCorrupt'); },
