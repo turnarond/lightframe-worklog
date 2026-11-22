@@ -78,6 +78,7 @@ async function connect() {
     const r = await send('Runtime.evaluate', {
       expression: expression, awaitPromise: true, returnByValue: true
     });
+    if (r.error) throw new Error('CDP ' + (r.error.message || JSON.stringify(r.error)));
     if (r.result && r.result.exceptionDetails) {
       throw new Error(JSON.stringify(r.result.exceptionDetails));
     }
@@ -261,10 +262,12 @@ async function main() {
       console.log('APP_LOG_END');
     }
     if (session) {
-      try {
-        await session.ev('window.api.saveTasks(' + origTasks + ').then(function () { return true; })');
-        await session.ev('window.api.saveSettings(' + origSettings + ').then(function () { return true; })');
-      } catch (e) { /* 页面可能已卸载 */ }
+      if (Object.keys(results).length) {
+        try {
+          await session.ev('window.api.saveTasks(' + origTasks + ').then(function () { return true; })');
+          await session.ev('window.api.saveSettings(' + origSettings + ').then(function () { return true; })');
+        } catch (e) { /* 页面可能已卸载 */ }
+      }
       try { session.ws.close(); } catch (e) { /* 忽略 */ }
     }
     try { execSync('taskkill /pid ' + child.pid + ' /t /f', { stdio: 'ignore' }); } catch (e) { /* 已退出 */ }

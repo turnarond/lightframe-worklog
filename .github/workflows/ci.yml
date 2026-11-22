@@ -70,8 +70,12 @@ jobs:
         shell: bash
         run: |
           for f in dxcompiler.dll ffmpeg.dll; do
-            if [ ! -e "dist/win-unpacked/$f" ]; then
-              echo "missing runtime dll: $f"
+            if [ ! -s "dist/win-unpacked/$f" ]; then
+              echo "missing or empty runtime dll: $f"
+              exit 1
+            fi
+            if [ "$(wc -c < "dist/win-unpacked/$f")" -lt 1000000 ]; then
+              echo "suspiciously small runtime dll: $f"
               exit 1
             fi
           done
