@@ -53,4 +53,21 @@ function releaseCommands(version, assets) {
   ];
 }
 
-module.exports = { parseReleaseArgs, validateVersionTrio, isCleanStatus, renderReleaseNotes, releaseCommands, sha256File, sha512File, md5File };
+function runCheck(input) {
+  const errors = [];
+  if (!isCleanStatus(input.statusText || '')) errors.push('工作区不干净');
+  errors.push(...validateVersionTrio({
+    packageVersion: input.packageVersion,
+    versionText: fs.readFileSync(require('node:path').join(input.cwd, 'VERSION'), 'utf8'),
+    changelog: input.changelog || ''
+  }, input.version));
+  if (input.readmeText && !input.readmeText.includes('当前版本：**v' + input.version + '**')) {
+    errors.push('README 当前版本不是 v' + input.version);
+  }
+  if (!input.allowExistingTag && (input.tags || []).includes('v' + input.version)) {
+    errors.push('tag v' + input.version + ' 已存在');
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+module.exports = { parseReleaseArgs, validateVersionTrio, isCleanStatus, runCheck, renderReleaseNotes, releaseCommands, sha256File, sha512File, md5File };

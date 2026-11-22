@@ -1,4 +1,7 @@
 'use strict';
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert');
 const lib = require('./release-lib.js');
@@ -27,4 +30,20 @@ test('releaseCommands 不含自动执行', () => {
   const cmds = lib.releaseCommands('2.12.0');
   assert.ok(cmds.some((c) => c.startsWith('git push origin main')));
   assert.ok(cmds.some((c) => c.includes('gh release create v2.12.0')));
+});
+
+test('runCheck 识别版本不一致与脏工作区', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lw-check-'));
+  fs.writeFileSync(path.join(dir, 'VERSION'), '2.11.1\n');
+  const r = lib.runCheck({
+    cwd: dir,
+    version: '2.12.0',
+    packageVersion: '2.12.0',
+    changelog: '## [2.12.0]',
+    statusText: ' M README.md',
+    tags: []
+  });
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.errors.some((e) => e.includes('VERSION')));
+  assert.ok(r.errors.some((e) => e.includes('工作区')));
 });
