@@ -9,8 +9,7 @@ function renderAppUpdateYml({ url, cacheName }) {
 }
 
 function installerArgs(testRoot) {
-  // /currentuser 防止安装器因机器上已有按机器安装而改走 all-users 模式（会先卸载既有安装）
-  return ['/S', '/currentuser', '/D=' + path.win32.join(testRoot, 'app')];
+  return ['/S', '/D=' + path.win32.join(testRoot, 'app')];
 }
 
 function assertSafeTestRoot({ testRoot, dailyInstallPath, dailyUserDataPath }) {
@@ -63,12 +62,11 @@ function parseLatestYml(text) {
 }
 
 function parseVerifyUpdateArgs(argv) {
-  const keys = { '--old-installer': 'oldInstaller', '--new-dir': 'newDir', '--test-root': 'testRoot' };
-  const opts = { oldInstaller: null, newDir: null, testRoot: null, updateInstall: false };
+  const keys = { '--old-app-dir': 'oldAppDir', '--new-dir': 'newDir', '--test-root': 'testRoot' };
+  const opts = { oldAppDir: null, newDir: null, testRoot: null };
   const list = argv || [];
   for (let i = 0; i < list.length; i++) {
     const arg = list[i];
-    if (arg === '--update-install') { opts.updateInstall = true; continue; }
     const key = keys[arg];
     if (!key) throw new Error('未知参数: ' + arg);
     if (i + 1 >= list.length || list[i + 1].startsWith('--')) throw new Error('缺少参数值: ' + arg);

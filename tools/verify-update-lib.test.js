@@ -18,7 +18,7 @@ test('renderAppUpdateYml 使用本地 generic feed', () => {
 
 test('installerArgs 的 /D 必须是最后参数（Windows-only）', winOnly, () => {
   const expected = path.win32.join('C:\\Temp', 'lw-update', 'app');
-  assert.deepStrictEqual(lib.installerArgs('C:\\Temp\\lw-update'), ['/S', '/currentuser', '/D=' + expected]);
+  assert.deepStrictEqual(lib.installerArgs('C:\\Temp\\lw-update'), ['/S', '/D=' + expected]);
 });
 
 test('assertSafeTestRoot 拒绝日常安装（Windows-only）', winOnly, () => {
@@ -93,25 +93,23 @@ test('parseLatestYml 拒绝绝对路径与上跳路径', () => {
   assert.throws(() => lib.parseLatestYml(up), /相对路径/);
 });
 
-test('parseVerifyUpdateArgs 解析三个必填参数与 --update-install', () => {
+test('parseVerifyUpdateArgs 解析三个必填参数', () => {
   const opts = lib.parseVerifyUpdateArgs([
-    '--old-installer', 'old.exe',
+    '--old-app-dir', 'unpacked',
     '--new-dir', 'dist',
-    '--test-root', 'tmp/root',
-    '--update-install'
+    '--test-root', 'tmp/root'
   ]);
   assert.deepStrictEqual(opts, {
-    oldInstaller: 'old.exe',
+    oldAppDir: 'unpacked',
     newDir: 'dist',
-    testRoot: 'tmp/root',
-    updateInstall: true
+    testRoot: 'tmp/root'
   });
 });
 
 test('parseVerifyUpdateArgs 缺参或未知参数时报错', () => {
-  assert.throws(() => lib.parseVerifyUpdateArgs(['--old-installer', 'old.exe', '--new-dir', 'dist']), /test-root/);
-  assert.throws(() => lib.parseVerifyUpdateArgs(['--old-installer', 'old.exe', '--new-dir', 'dist', '--test-root', 'tmp', '--bogus']), /未知参数/);
-  assert.throws(() => lib.parseVerifyUpdateArgs(['--old-installer']), /缺少参数/);
+  assert.throws(() => lib.parseVerifyUpdateArgs(['--old-app-dir', 'unpacked', '--new-dir', 'dist']), /test-root/);
+  assert.throws(() => lib.parseVerifyUpdateArgs(['--old-app-dir', 'unpacked', '--new-dir', 'dist', '--test-root', 'tmp', '--bogus']), /未知参数/);
+  assert.throws(() => lib.parseVerifyUpdateArgs(['--old-app-dir']), /缺少参数/);
 });
 
 test('findDownloadedInstaller 按 sha256 命中并忽略非 exe', () => {

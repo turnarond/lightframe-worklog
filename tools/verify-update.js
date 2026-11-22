@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// 本地端到端更新验证：静默安装旧版到临时目录 → 改写其 app-update.yml 指向本地 generic feed
-// → 经 CDP 触发检查/下载 → 校验缓存中的安装包哈希。默认不改动日常安装与用户数据。
+// 本地端到端更新验证：复制旧版解包目录到临时目录 → 改写其 app-update.yml 指向本地 generic feed
+// → 经 CDP 触发检查/下载 → 校验缓存中的安装包哈希。不运行任何安装/卸载程序。
 'use strict';
 
 const { spawn, spawnSync } = require('node:child_process');
@@ -14,10 +14,6 @@ const lib = require('./verify-update-lib.js');
 
 const CACHE_NAME = 'lw-update-e2e';
 const APP_EXE = '光影工作志.exe';
-const UNINSTALL_EXE = 'Uninstall 光影工作志.exe';
-const START_MENU_LNK = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-  'Microsoft', 'Windows', 'Start Menu', 'Programs', '光影工作志.lnk');
-const DESKTOP_LNK = path.join(os.homedir(), 'Desktop', '光影工作志.lnk');
 const LOCAL_BASE = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
 const ROAMING_BASE = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
 const DAILY_INSTALLS = [
@@ -88,28 +84,15 @@ function startServer(distDir, port) {
   });
 }
 
-function waitFor(fn, ms, label) {
-  const deadline = Date.now() + ms;
-  return (async () => {
-    while (Date.now() < deadline) {
-      const value = await fn();
-      if (value) return value;
-      await sleep(500);
-    }
-    throw new Error('等待超时: ' + label);
-  })();
-}
-
-function installOld(exe, testRoot) {
-  if (!fs.existsSync(exe)) throw new Error('旧版安装包不存在: ' + exe);
-  const args = lib.installerArgs(testRoot);
-  log('安装旧版: ' + path.basename(exe) + ' ' + args.join(' '));
-  const r = spawnSync(exe, args, { timeout: 300000, windowsHide: true });
-  if (r.error) throw new Error('旧版安装进程失败: ' + r.error.message);
-  log('旧版安装器退出码=' + r.status);
-  const app = path.join(testRoot, 'app', APP_EXE);
-  return waitFor(() => fs.existsSync(app) && app, 90000, '旧版 exe 出现')
-    .then(() => app);
+function prepareOldApp(srcDir, testRoot) {
+  const srcExe = path.join(srcDir, APP_EXE);
+  if (!fs.existsSync(srcExe)) throw new Error('--old-app-dir 必须是已解包目录，不能传安装器: ' + srcDir);
+  const app = path.join(testRoot, 'app');
+  log('复制旧版解包目录: ' + srcDir + ' -> ' + app);
+  fs.cpSync(srcDir, app, { recursive: true });
+  const exe = path.join(app, APP_EXE);
+  if (!fs.existsSync(exe)) throw new Error('未找到旧版 exe: ' + exe);
+  return exe;
 }
 
 function patchFeed(appDir, url) {
@@ -199,28 +182,6 @@ function killTree(child) {
   spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true });
 }
 
-function snapshot(file) {
-  try { return fs.existsSync(file) ? fs.readFileSync(file) : null; } catch (e) { return null; }
-}
-
-function restoreShortcut(file, bytes) {
-  try {
-    if (bytes) fs.writeFileSync(file, bytes);
-    else if (fs.existsSync(file)) fs.rmSync(file, { force: true });
-  } catch (e) {
-    log('恢复快捷方式失败: ' + file + ' ' + e.message);
-  }
-}
-
-function uninstall(appDir) {
-  const un = path.join(appDir, UNINSTALL_EXE);
-  if (!fs.existsSync(un)) { log('未找到卸载器: ' + un); return; }
-  log('静默卸载临时安装: ' + un);
-  const r = spawnSync(un, ['/S'], { timeout: 180000, windowsHide: true });
-  log('卸载器退出码=' + r.status);
-  spawnSync('ping', ['-n', '3', '127.0.0.1'], { stdio: 'ignore', windowsHide: true });
-}
-
 function rmrf(dir) {
   for (let i = 0; i < 30; i++) {
     try {
@@ -233,25 +194,11 @@ function rmrf(dir) {
   return false;
 }
 
-async function readVersion(appExe, userDataDir, port) {
-  const child = launchApp(appExe, userDataDir, port);
-  try {
-    const session = await connectCdp(port);
-    try {
-      return await withTimeout(session.ev('window.api.getVersion()'), 20000, '读取版本');
-    } finally {
-      try { session.ws.close(); } catch (e) { /* 忽略 */ }
-    }
-  } finally {
-    killTree(child);
-  }
-}
-
 async function main() {
   const opts = lib.parseVerifyUpdateArgs(process.argv.slice(2));
   const testRoot = path.resolve(opts.testRoot);
   const newDir = path.resolve(opts.newDir);
-  const oldInstaller = path.resolve(opts.oldInstaller);
+  const oldAppDir = path.resolve(opts.oldAppDir);
 
   const errs = [];
   for (const daily of DAILY_INSTALLS) {
@@ -263,6 +210,9 @@ async function main() {
   if (testRoot === CACHE_DIR || testRoot.startsWith(CACHE_DIR + path.sep)) {
     throw new Error('test-root 不得位于更新缓存目录: ' + CACHE_DIR);
   }
+  if (!fs.existsSync(path.join(oldAppDir, APP_EXE))) {
+    throw new Error('--old-app-dir 必须是已解包目录，不能传安装器: ' + oldAppDir);
+  }
   if (!fs.existsSync(path.join(newDir, 'latest.yml'))) throw new Error('new-dir 缺少 latest.yml: ' + newDir);
   if (fs.existsSync(testRoot) && fs.readdirSync(testRoot).length) {
     throw new Error('test-root 已存在且非空，请先清理: ' + testRoot);
@@ -270,8 +220,7 @@ async function main() {
 
   fs.mkdirSync(path.join(testRoot, 'logs'), { recursive: true });
   logStream = fs.createWriteStream(path.join(testRoot, 'logs', 'verify-update.log'), { flags: 'a' });
-  log('参数: old-installer=' + oldInstaller + ' new-dir=' + newDir + ' test-root=' + testRoot +
-    ' update-install=' + opts.updateInstall);
+  log('参数: old-app-dir=' + oldAppDir + ' new-dir=' + newDir + ' test-root=' + testRoot);
 
   const info = lib.parseLatestYml(fs.readFileSync(path.join(newDir, 'latest.yml'), 'utf8'));
   const newInstaller = path.join(newDir, info.path);
@@ -283,16 +232,12 @@ async function main() {
   if (info.sha512 && newSha512 !== info.sha512) throw new Error('安装包 sha512 与 latest.yml 不一致');
   log('新版本: ' + info.version + ' 安装包=' + info.path + ' size=' + newSize + ' sha256=' + newSha256);
 
-  const snapStart = snapshot(START_MENU_LNK);
-  const snapDesktop = snapshot(DESKTOP_LNK);
-
   let child = null;
   let server = null;
   let session = null;
-  let testRootOk = false;
+  let ok = false;
   try {
-    const appExe = await installOld(oldInstaller, testRoot);
-    testRootOk = true;
+    const appExe = prepareOldApp(oldAppDir, testRoot);
     const userDataDir = path.join(testRoot, 'userdata');
 
     const feedPort = await pickPort();
@@ -323,52 +268,22 @@ async function main() {
     if (info.sha512 && gotSha512 !== info.sha512) throw new Error('下载文件 sha512 不匹配');
     if (info.size && gotSize !== info.size) throw new Error('下载文件 size 不匹配: ' + gotSize);
     log('UPDATE_DOWNLOADED path=' + hit + ' sha256=' + newSha256 + ' sha512=' + gotSha512 + ' size=' + gotSize);
-
-    if (opts.updateInstall) {
-      log('触发应用内安装（autoInstallOnAppQuit）');
-      await session.ev('window.api.quit()');
-      await withTimeout(new Promise((resolve) => {
-        if (child.exitCode !== null) { resolve(); return; }
-        child.once('exit', resolve);
-      }), 120000, '旧版本退出');
-      const installerName = path.basename(hit);
-      const stillRunning = () => {
-        const r = spawnSync('tasklist', ['/FI', 'IMAGENAME eq ' + installerName, '/NH'], { encoding: 'utf8', windowsHide: true });
-        return String(r.stdout || '').toLowerCase().includes(installerName.toLowerCase());
-      };
-      if (stillRunning()) await waitFor(() => !stillRunning(), 300000, '更新安装器结束');
-      const post = await readVersion(appExe, userDataDir, debugPort);
-      log('安装后版本: ' + post);
-      if (post !== info.version) throw new Error('安装后版本不符: ' + post + ' != ' + info.version);
-    } else {
-      log('跳过完整安装（未传 --update-install）；真实 2.12.0 安装验证留 Task 7');
-    }
-
+    log('完整安装不在脚本内执行；安装升级与 asar 版本核对见发布检查单（Windows Sandbox/测试用户）');
     log('RESULT PASS');
+    ok = true;
   } catch (e) {
     log('RESULT FAIL: ' + (e && e.message ? e.message : e));
-    if (logStream) logStream.end();
-    logStream = null;
-    const keep = testRoot + '-logs-' + Date.now();
-    try {
-      fs.cpSync(path.join(testRoot, 'logs'), keep, { recursive: true });
-      log('失败日志已保留: ' + keep);
-    } catch (e2) { /* 忽略 */ }
     throw e;
   } finally {
     if (session) { try { session.ws.close(); } catch (e) { /* 忽略 */ } }
     killTree(child);
     if (server) await new Promise((resolve) => server.close(resolve));
-    if (testRootOk) {
-      uninstall(path.join(testRoot, 'app'));
-      restoreShortcut(START_MENU_LNK, snapStart);
-      restoreShortcut(DESKTOP_LNK, snapDesktop);
-      const programStill = DAILY_INSTALLS.find((p) => fs.existsSync(path.join(p, APP_EXE)));
-      log('日常安装抽查: ' + (programStill || '(未发现)'));
-    }
     rmrf(CACHE_DIR);
-    if (testRootOk) rmrf(testRoot);
-    else if (fs.existsSync(testRoot) && fs.readdirSync(testRoot).length === 0) fs.rmSync(testRoot, { recursive: true, force: true });
+    if (ok) {
+      rmrf(testRoot);
+    } else {
+      log('失败保留临时目录与日志: ' + testRoot);
+    }
     if (logStream) logStream.end();
     logStream = null;
   }
