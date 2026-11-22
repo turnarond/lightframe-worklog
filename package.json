@@ -14,6 +14,7 @@
     "fetch:cloudflared": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/fetch-cloudflared.ps1",
     "deploy:ssh": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/deploy-ssh.ps1",
     "verify:lan": "node tools/verify-lan.js",
+    "verify:update": "node tools/verify-update.js",
     "icon": "node tools/genicon.js",
     "smoke": "node tools/smoke-ui.js",
     "smoke:boot": "node tools/smoke-boot.js",

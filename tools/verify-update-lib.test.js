@@ -18,7 +18,7 @@ test('renderAppUpdateYml 使用本地 generic feed', () => {
 
 test('installerArgs 的 /D 必须是最后参数（Windows-only）', winOnly, () => {
   const expected = path.win32.join('C:\\Temp', 'lw-update', 'app');
-  assert.deepStrictEqual(lib.installerArgs('C:\\Temp\\lw-update'), ['/S', '/D=' + expected]);
+  assert.deepStrictEqual(lib.installerArgs('C:\\Temp\\lw-update'), ['/S', '/currentuser', '/D=' + expected]);
 });
 
 test('assertSafeTestRoot 拒绝日常安装（Windows-only）', winOnly, () => {
@@ -59,6 +59,59 @@ test('assertSafeTestRoot 拒绝日常安装子目录（Windows-only）', winOnly
     dailyUserDataPath: 'C:\\Users\\x\\AppData\\Roaming\\lightframe-worklog'
   });
   assert.match(errs.join(' '), /拒绝触碰/);
+});
+
+const SAMPLE_LATEST = [
+  'version: 2.11.1',
+  'files:',
+  '  - url: lightframe-worklog-setup-2.11.1.exe',
+  '    sha512: xSe3Tt3R8FF0+h0DxMYyLXvzvpJr3GQwOKpwWNh9lBHDRDvhY+hENyiwRo169NTeSyPh/Cv2c3gNYTvObndrwA==',
+  '    size: 113867632',
+  'path: lightframe-worklog-setup-2.11.1.exe',
+  'sha512: xSe3Tt3R8FF0+h0DxMYyLXvzvpJr3GQwOKpwWNh9lBHDRDvhY+hENyiwRo169NTeSyPh/Cv2c3gNYTvObndrwA==',
+  "releaseDate: '2026-11-22T12:17:21.572Z'",
+  ''
+].join('\n');
+
+test('parseLatestYml 提取版本、安装包路径、sha512 与大小', () => {
+  const info = lib.parseLatestYml(SAMPLE_LATEST);
+  assert.strictEqual(info.version, '2.11.1');
+  assert.strictEqual(info.path, 'lightframe-worklog-setup-2.11.1.exe');
+  assert.strictEqual(info.size, 113867632);
+  assert.match(info.sha512, /^xSe3Tt3R8FF0/);
+});
+
+test('parseLatestYml 缺少 version/path 时报错', () => {
+  assert.throws(() => lib.parseLatestYml('sha512: abc\n'), /version/);
+  assert.throws(() => lib.parseLatestYml('version: 2.12.0\n'), /path/);
+});
+
+test('parseLatestYml 拒绝绝对路径与上跳路径', () => {
+  const abs = SAMPLE_LATEST.replace('path: lightframe-worklog-setup-2.11.1.exe', 'path: C:\\evil\\setup.exe');
+  assert.throws(() => lib.parseLatestYml(abs), /相对路径/);
+  const up = SAMPLE_LATEST.replace('path: lightframe-worklog-setup-2.11.1.exe', 'path: ../setup.exe');
+  assert.throws(() => lib.parseLatestYml(up), /相对路径/);
+});
+
+test('parseVerifyUpdateArgs 解析三个必填参数与 --update-install', () => {
+  const opts = lib.parseVerifyUpdateArgs([
+    '--old-installer', 'old.exe',
+    '--new-dir', 'dist',
+    '--test-root', 'tmp/root',
+    '--update-install'
+  ]);
+  assert.deepStrictEqual(opts, {
+    oldInstaller: 'old.exe',
+    newDir: 'dist',
+    testRoot: 'tmp/root',
+    updateInstall: true
+  });
+});
+
+test('parseVerifyUpdateArgs 缺参或未知参数时报错', () => {
+  assert.throws(() => lib.parseVerifyUpdateArgs(['--old-installer', 'old.exe', '--new-dir', 'dist']), /test-root/);
+  assert.throws(() => lib.parseVerifyUpdateArgs(['--old-installer', 'old.exe', '--new-dir', 'dist', '--test-root', 'tmp', '--bogus']), /未知参数/);
+  assert.throws(() => lib.parseVerifyUpdateArgs(['--old-installer']), /缺少参数/);
 });
 
 test('findDownloadedInstaller 按 sha256 命中并忽略非 exe', () => {

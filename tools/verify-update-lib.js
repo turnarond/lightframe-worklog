@@ -9,7 +9,8 @@ function renderAppUpdateYml({ url, cacheName }) {
 }
 
 function installerArgs(testRoot) {
-  return ['/S', '/D=' + path.win32.join(testRoot, 'app')];
+  // /currentuser 防止安装器因机器上已有按机器安装而改走 all-users 模式（会先卸载既有安装）
+  return ['/S', '/currentuser', '/D=' + path.win32.join(testRoot, 'app')];
 }
 
 function assertSafeTestRoot({ testRoot, dailyInstallPath, dailyUserDataPath }) {
@@ -41,4 +42,44 @@ function findDownloadedInstaller(cacheDir, sha256) {
   return null;
 }
 
-module.exports = { renderAppUpdateYml, installerArgs, assertSafeTestRoot, findDownloadedInstaller };
+function parseLatestYml(text) {
+  const src = String(text == null ? '' : text);
+  const version = /^version:\s*(\S+)\s*$/m.exec(src);
+  if (!version) throw new Error('latest.yml 缺少 version');
+  const p = /^path:\s*(.+?)\s*$/m.exec(src.replace(/\r/g, ''));
+  if (!p) throw new Error('latest.yml 缺少 path');
+  const file = p[1].replace(/^['"]|['"]$/g, '');
+  if (!file || path.win32.isAbsolute(file) || file.split(/[\\/]/).indexOf('..') >= 0) {
+    throw new Error('latest.yml 的 path 必须是相对路径: ' + file);
+  }
+  const sha512 = /^\s*sha512:\s*(\S+)\s*$/m.exec(src);
+  const size = /^\s*size:\s*(\d+)\s*$/m.exec(src);
+  return {
+    version: version[1],
+    path: file,
+    sha512: sha512 ? sha512[1] : null,
+    size: size ? Number(size[1]) : null
+  };
+}
+
+function parseVerifyUpdateArgs(argv) {
+  const keys = { '--old-installer': 'oldInstaller', '--new-dir': 'newDir', '--test-root': 'testRoot' };
+  const opts = { oldInstaller: null, newDir: null, testRoot: null, updateInstall: false };
+  const list = argv || [];
+  for (let i = 0; i < list.length; i++) {
+    const arg = list[i];
+    if (arg === '--update-install') { opts.updateInstall = true; continue; }
+    const key = keys[arg];
+    if (!key) throw new Error('未知参数: ' + arg);
+    if (i + 1 >= list.length || list[i + 1].startsWith('--')) throw new Error('缺少参数值: ' + arg);
+    opts[key] = list[++i];
+  }
+  const missing = Object.keys(keys).filter((k) => !opts[keys[k]]);
+  if (missing.length) throw new Error('缺少必填参数: ' + missing.join(', '));
+  return opts;
+}
+
+module.exports = {
+  renderAppUpdateYml, installerArgs, assertSafeTestRoot, findDownloadedInstaller,
+  parseLatestYml, parseVerifyUpdateArgs
+};
