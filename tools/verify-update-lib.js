@@ -9,7 +9,7 @@ function renderAppUpdateYml({ url, cacheName }) {
 }
 
 function installerArgs(testRoot) {
-  return ['/S', '/D=' + path.join(testRoot, 'app')];
+  return ['/S', '/D=' + path.win32.join(testRoot, 'app')];
 }
 
 function assertSafeTestRoot({ testRoot, dailyInstallPath, dailyUserDataPath }) {
