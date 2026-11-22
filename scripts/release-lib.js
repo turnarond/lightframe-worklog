@@ -70,4 +70,16 @@ function runCheck(input) {
   return { ok: errors.length === 0, errors };
 }
 
-module.exports = { parseReleaseArgs, validateVersionTrio, isCleanStatus, runCheck, renderReleaseNotes, releaseCommands, sha256File, sha512File, md5File };
+function findCachedElectron(version, cacheRoot) {
+  const path = require('node:path');
+  const target = 'electron-v' + version + '-win32-x64.zip';
+  if (!fs.existsSync(cacheRoot)) return null;
+  const dirs = fs.readdirSync(cacheRoot, { withFileTypes: true }).filter((d) => d.isDirectory());
+  for (const d of dirs) {
+    const hit = path.join(cacheRoot, d.name, target);
+    if (fs.existsSync(hit)) return hit;
+  }
+  return null;
+}
+
+module.exports = { parseReleaseArgs, validateVersionTrio, isCleanStatus, runCheck, renderReleaseNotes, releaseCommands, sha256File, sha512File, md5File, findCachedElectron };

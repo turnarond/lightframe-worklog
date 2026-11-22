@@ -32,6 +32,15 @@ test('releaseCommands 不含自动执行', () => {
   assert.ok(cmds.some((c) => c.includes('gh release create v2.12.0')));
 });
 
+test('findCachedElectron 找到 electron-v45.4.1 zip', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lw-cache-'));
+  const dir = path.join(root, 'abc');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'electron-v45.4.1-win32-x64.zip'), 'x');
+  assert.match(lib.findCachedElectron('45.4.1', root), /electron-v45\.4\.1-win32-x64\.zip$/);
+  assert.strictEqual(lib.findCachedElectron('45.4.2', root), null);
+});
+
 test('runCheck 识别版本不一致与脏工作区', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lw-check-'));
   fs.writeFileSync(path.join(dir, 'VERSION'), '2.11.1\n');

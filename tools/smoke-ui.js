@@ -10,7 +10,7 @@ const { spawn, execSync } = require('node:child_process');
 
 const PORT = Number(process.env.SMOKE_PORT || 9347);
 const ROOT = path.join(__dirname, '..');
-const EXE = path.join(ROOT, 'dist', 'win-unpacked', '光影工作志.exe');
+const EXE = process.env.SMOKE_EXE || path.join(ROOT, 'dist', 'win-unpacked', '光影工作志.exe');
 // 独立 userData：既绕开与用户已安装实例的单实例锁，也不触碰真实任务/设置数据
 const SMOKE_USER_DATA = path.join(os.tmpdir(), 'lw-smoke-ui-' + process.pid);
 const nowDate = new Date();
