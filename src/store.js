@@ -12,6 +12,8 @@ const DEFAULT_SETTINGS = {
   lastCategory: DEFAULT_CATEGORIES[0],
   syncCode: '',
   serverUrl: '',
+  syncPaused: false,
+  backup: { enabled: true },
   launchAtLogin: true,
   alwaysOnTop: true,
   closeToTray: true,
@@ -27,7 +29,7 @@ const DEFAULT_SETTINGS = {
   }
 };
 
-const NESTED_SETTINGS = ['lastReminded', 'weeklyPlans', 'widget'];
+const NESTED_SETTINGS = ['lastReminded', 'weeklyPlans', 'widget', 'backup'];
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function clone(value) {
@@ -62,6 +64,23 @@ async function readJson(filePath) {
   }
 }
 
+async function readJsonWithStatus(filePath) {
+  try {
+    const text = await fsp.readFile(filePath, 'utf8');
+    return { data: JSON.parse(text), missing: false, corrupt: false, error: '' };
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return { data: undefined, missing: true, corrupt: false, error: '' };
+    }
+    return { data: undefined, missing: false, corrupt: true, error: err.message };
+  }
+}
+
+function withHook(options) {
+  const fn = options && typeof options.beforeWrite === 'function' ? options.beforeWrite : null;
+  return fn ? () => fn() : async () => {};
+}
+
 /** 递归建目录后原子写入：先写临时文件，再 rename 覆盖，避免写一半崩溃/断电导致文件损坏 */
 async function writeJson(filePath, data) {
   const dir = path.dirname(filePath);
@@ -71,16 +90,22 @@ async function writeJson(filePath, data) {
   await fsp.rename(tmpPath, filePath);
 }
 
-function createTaskStore(filePath) {
+function createTaskStore(filePath, options) {
+  const beforeWrite = withHook(options);
   return {
-    async load() {
-      const raw = await readJson(filePath);
-      if (!Array.isArray(raw)) return [];
-      return raw.map(function (item) {
+    async loadWithStatus() {
+      const r = await readJsonWithStatus(filePath);
+      const raw = r.data;
+      const data = Array.isArray(raw) ? raw.map(function (item) {
         return TaskModel.normalizeTask(item);
-      }).filter(Boolean);
+      }).filter(Boolean) : [];
+      return { data: data, missing: r.missing, corrupt: r.corrupt, error: r.error };
+    },
+    async load() {
+      return (await this.loadWithStatus()).data;
     },
     async save(tasks) {
+      await beforeWrite();
       const list = Array.isArray(tasks) ? tasks.map(function (item) {
         const t = TaskModel.normalizeTask(item);
         if (!t) return null;
@@ -95,13 +120,14 @@ function createTaskStore(filePath) {
   };
 }
 
-function createLogStore(filePath) {
+function createLogStore(filePath, options) {
+  const beforeWrite = withHook(options);
   return {
-    async load() {
-      const raw = await readJson(filePath);
-      if (!isPlainObject(raw)) return {};
+    async loadWithStatus() {
+      const r = await readJsonWithStatus(filePath);
+      const raw = r.data;
       const out = {};
-      Object.keys(raw).forEach(function (key) {
+      if (isPlainObject(raw)) Object.keys(raw).forEach(function (key) {
         if (!DATE_KEY_RE.test(key)) return;
         const entry = raw[key];
         if (!isPlainObject(entry)) return;
@@ -114,9 +140,13 @@ function createLogStore(filePath) {
           deletedAt: entry.deletedAt ? toMs(entry.deletedAt) : null
         };
       });
-      return out;
+      return { data: out, missing: r.missing, corrupt: r.corrupt, error: r.error };
+    },
+    async load() {
+      return (await this.loadWithStatus()).data;
     },
     async save(logs) {
+      await beforeWrite();
       const out = isPlainObject(logs) ? logs : {};
       await writeJson(filePath, out);
     }
@@ -138,12 +168,23 @@ function mergeSettings(stored) {
   return merged;
 }
 
-function createSettingsStore(filePath) {
+function createSettingsStore(filePath, options) {
+  const beforeWrite = withHook(options);
   return {
+    async loadWithStatus() {
+      const r = await readJsonWithStatus(filePath);
+      return {
+        data: mergeSettings(r.data),
+        missing: r.missing,
+        corrupt: r.corrupt,
+        error: r.error
+      };
+    },
     async load() {
-      return mergeSettings(await readJson(filePath));
+      return (await this.loadWithStatus()).data;
     },
     async save(settings) {
+      await beforeWrite();
       await writeJson(filePath, mergeSettings(settings));
     }
   };
@@ -161,11 +202,13 @@ function defaultSyncMeta() {
   };
 }
 
-function createSyncMetaStore(filePath) {
+function createSyncMetaStore(filePath, options) {
+  const beforeWrite = withHook(options);
   const TYPES = ['tasks', 'daily_logs', 'prefs'];
   return {
-    async load() {
-      const raw = await readJson(filePath);
+    async loadWithStatus() {
+      const r = await readJsonWithStatus(filePath);
+      const raw = r.data;
       const out = defaultSyncMeta();
       if (isPlainObject(raw)) {
         TYPES.forEach(function (t) {
@@ -175,9 +218,13 @@ function createSyncMetaStore(filePath) {
           }
         });
       }
-      return out;
+      return { data: out, missing: r.missing, corrupt: r.corrupt, error: r.error };
+    },
+    async load() {
+      return (await this.loadWithStatus()).data;
     },
     async save(meta) {
+      await beforeWrite();
       await writeJson(filePath, meta);
     }
   };
@@ -185,6 +232,7 @@ function createSyncMetaStore(filePath) {
 
 module.exports = {
   DEFAULT_SETTINGS: DEFAULT_SETTINGS,
+  defaultSyncMeta: defaultSyncMeta,
   createTaskStore: createTaskStore,
   createLogStore: createLogStore,
   createSettingsStore: createSettingsStore,

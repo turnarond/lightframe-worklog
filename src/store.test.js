@@ -247,3 +247,33 @@ test('SyncMeta store: 忽略未知类型，保留已知类型', async () => {
   assert.equal(m.prefs.pushCursor, 0);
 });
 
+
+test('save 前调用 beforeWrite，失败则不写盘', async () => {
+  const dir = tmpDir();
+  const file = path.join(dir, 'tasks.json');
+  writeRaw(file, '[]');
+  let called = 0;
+  const store = S.createTaskStore(file, {
+    beforeWrite: async () => { called++; throw new Error('backup failed'); }
+  });
+  await assert.rejects(() => store.save([{ id: 'x', title: 'x', category: '工作' }]), /backup failed/);
+  assert.equal(called, 1);
+  assert.equal(fs.readFileSync(file, 'utf8'), '[]');
+});
+
+test('loadWithStatus 标记损坏文件且 load 保持原行为', async () => {
+  const dir = tmpDir();
+  const file = path.join(dir, 'tasks.json');
+  writeRaw(file, '{bad json');
+  const store = S.createTaskStore(file);
+  const result = await store.loadWithStatus();
+  assert.equal(result.corrupt, true);
+  assert.deepEqual(result.data, []);
+  assert.deepEqual(await store.load(), []);
+});
+
+test('DEFAULT_SETTINGS 包含备份与同步暂停字段', () => {
+  assert.equal(S.DEFAULT_SETTINGS.syncPaused, false);
+  assert.deepEqual(S.DEFAULT_SETTINGS.backup, { enabled: true });
+  assert.equal(typeof S.defaultSyncMeta, 'function');
+});
