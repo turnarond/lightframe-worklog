@@ -56,6 +56,32 @@ test('assertSafeTestRoot 拒绝日常安装子目录（Windows-only）', winOnly
   assert.match(errs.join(' '), /拒绝触碰/);
 });
 
+const LOG_PATH_BASE = {
+  testRoot: 'C:\\Temp\\lw-update-e2e-1',
+  dailyInstallPath: 'C:\\Program Files\\lightframe-worklog',
+  dailyUserDataPath: 'C:\\Users\\x\\AppData\\Roaming\\lightframe-worklog',
+  oldAppDir: 'C:\\build\\win-unpacked',
+  newDir: 'C:\\build\\dist'
+};
+const logErrs = (logFile) => lib.assertLogPathSafe(Object.assign({}, LOG_PATH_BASE, { logFile })).join(' ');
+
+test('assertLogPathSafe 拒绝 Program Files 与 APPDATA（Windows-only）', winOnly, () => {
+  assert.match(logErrs('C:\\Program Files\\lightframe-worklog\\logs\\drill.log'), /日常安装/);
+  assert.match(logErrs('C:\\Users\\x\\AppData\\Roaming\\lightframe-worklog\\drill.log'), /日常用户数据/);
+});
+
+test('assertLogPathSafe 拒绝 test-root、old-app-dir 与 new-dir（Windows-only）', winOnly, () => {
+  assert.match(logErrs('C:\\Temp\\lw-update-e2e-1\\drill.log'), /test-root/);
+  assert.match(logErrs('C:\\build\\win-unpacked\\drill.log'), /旧版解包目录/);
+  assert.match(logErrs('C:\\build\\dist\\drill.log'), /新版 feed 目录/);
+});
+
+test('assertLogPathSafe 放行 .superpowers、同级日志与相似前缀（Windows-only）', winOnly, () => {
+  assert.deepStrictEqual(logErrs('D:\\repo\\.superpowers\\sdd\\drill.log'), '');
+  assert.deepStrictEqual(logErrs('C:\\Temp\\lw-update-e2e-1.verify-update.log'), '');
+  assert.deepStrictEqual(logErrs('C:\\Program Files\\lightframe-worklog-backup\\drill.log'), '');
+});
+
 const SAMPLE_LATEST = [
   'version: 2.11.1',
   'files:',

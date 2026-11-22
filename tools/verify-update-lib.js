@@ -8,6 +8,36 @@ function renderAppUpdateYml({ url, cacheName }) {
   return 'provider: generic\nurl: ' + url + '\nupdaterCacheDirName: ' + cacheName + '\n';
 }
 
+function isSameOrInside(root, target) {
+  const r = path.resolve(root);
+  const t = path.resolve(target);
+  if (process.platform === 'win32') {
+    const rl = r.toLowerCase();
+    const tl = t.toLowerCase();
+    return tl === rl || tl.startsWith(rl + path.sep);
+  }
+  return t === r || t.startsWith(r + path.sep);
+}
+
+function assertLogPathSafe({ logFile, testRoot, dailyInstallPath, dailyUserDataPath, oldAppDir, newDir }) {
+  const errs = [];
+  const log = path.resolve(logFile);
+  const roots = [
+    ['test-root', testRoot],
+    ['日常安装', dailyInstallPath],
+    ['日常用户数据', dailyUserDataPath],
+    ['旧版解包目录', oldAppDir],
+    ['新版 feed 目录', newDir]
+  ];
+  for (const item of roots) {
+    const label = item[0];
+    const root = item[1];
+    if (!root) continue;
+    if (isSameOrInside(root, log)) errs.push('拒绝写日志到' + label + '内: ' + log);
+  }
+  return errs;
+}
+
 function assertSafeTestRoot({ testRoot, dailyInstallPath, dailyUserDataPath }) {
   const errs = [];
   const root = path.resolve(testRoot);
@@ -75,6 +105,6 @@ function parseVerifyUpdateArgs(argv) {
 }
 
 module.exports = {
-  renderAppUpdateYml, assertSafeTestRoot, findDownloadedInstaller,
+  renderAppUpdateYml, assertSafeTestRoot, assertLogPathSafe, findDownloadedInstaller,
   parseLatestYml, parseVerifyUpdateArgs
 };

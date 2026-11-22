@@ -324,9 +324,15 @@ async function main() {
   }
   const feed = inspectFeed(newDir);
   const retainedLog = opts.logFile ? path.resolve(opts.logFile) : testRoot + '.verify-update.log';
-  if (isInside(testRoot, retainedLog)) {
-    throw new Error('--log-file 不得位于 test-root 内: ' + retainedLog);
-  }
+  const logErrs = lib.assertLogPathSafe({
+    logFile: retainedLog,
+    testRoot,
+    dailyInstallPath: DAILY_INSTALL,
+    dailyUserDataPath: DAILY_USER_DATA,
+    oldAppDir,
+    newDir
+  });
+  if (logErrs.length) throw new Error(logErrs.join('; '));
   if (fs.existsSync(testRoot) && fs.readdirSync(testRoot).length) {
     throw new Error('test-root 已存在且非空，请先清理: ' + testRoot);
   }
