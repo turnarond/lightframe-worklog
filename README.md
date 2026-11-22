@@ -45,7 +45,7 @@ npm start        # 启动应用
 
 ```powershell
 Get-FileHash .\lightframe-worklog-setup-2.11.0.exe -Algorithm SHA256
-# 期望：BE92EAA0CFCF358EFD2DF14185C7DA078DAE2D93C00A2A7E79851E23CEFA10A9
+# 期望：89EA5FC9346AFA63491E290171BB173D34702B750322856C5183F4CAD7584194
 ```
 
 哈希不匹配时不要运行。代码签名方案见 `doc/05-运维/2026-11-21-SignPath代码签名接入.md`（当前暂缓）。
