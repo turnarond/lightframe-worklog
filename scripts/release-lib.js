@@ -82,4 +82,17 @@ function findCachedElectron(version, cacheRoot) {
   return null;
 }
 
-module.exports = { parseReleaseArgs, validateVersionTrio, isCleanStatus, runCheck, renderReleaseNotes, releaseCommands, sha256File, sha512File, md5File, findCachedElectron };
+function resolveAbsentMarker({ version, previousVersion, explicit }) {
+  const marker = '"version": "' + version + '"';
+  if (explicit) {
+    if (explicit === marker) throw new Error('absent-marker 与当前版本 marker 相同：' + explicit);
+    return explicit;
+  }
+  const prev = String(previousVersion || '').trim().replace(/^v/i, '');
+  if (!prev) throw new Error('缺少 previous-version，无法生成 absent-marker');
+  const absent = '"version": "' + prev + '"';
+  if (absent === marker) throw new Error('absent-marker 与 marker 相同（previous-version=' + prev + '）');
+  return absent;
+}
+
+module.exports = { parseReleaseArgs, validateVersionTrio, isCleanStatus, runCheck, renderReleaseNotes, releaseCommands, sha256File, sha512File, md5File, findCachedElectron, resolveAbsentMarker };

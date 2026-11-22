@@ -44,13 +44,23 @@ function runElectronBuilder(worktree, args) {
   run(process.execPath, [cli].concat(args), { cwd: worktree });
 }
 
-function buildAndVerify(opts, version) {
+function resolvePreviousTag(version) {
+  try {
+    return git(['describe', '--tags', '--abbrev=0', '--exclude', 'v' + version]);
+  } catch (e) {
+    throw new Error('无法从 git describe 推导 previous-version，请显式传 --previous-version');
+  }
+}
+
+function buildAndVerify(opts, version, absentMarker) {
   const { ensureElectron } = require('./ensure-electron.js');
   const wt = path.resolve(opts.worktree || '../lightframe-worklog-clean');
   const out = path.join(wt, 'dist-release-' + version);
   const card = path.resolve(opts['change-card']);
   const evidence = path.resolve(opts['review-evidence']);
   run('git', ['-C', wt, 'checkout', '--detach', git(['rev-parse', 'HEAD'])]);
+  const wtStatus = execFileSync('git', ['-C', wt, 'status', '--porcelain'], { encoding: 'utf8' });
+  if (!lib.isCleanStatus(wtStatus)) throw new Error('构建 worktree 不干净：\n' + wtStatus.trim());
   runNpm(['ci'], { cwd: wt });
   const electronPkg = require(path.join(wt, 'node_modules', 'electron', 'package.json')).version;
   ensureElectron({
@@ -62,7 +72,7 @@ function buildAndVerify(opts, version) {
   runNpm(['run', 'test:release'], { cwd: wt });
   run(process.execPath, ['tools/smoke-boot.js'], { cwd: wt });
   run(process.execPath, ['tools/verify-lan.js', '--self-host'], { cwd: wt });
-  const buildArgs = ['--win', 'nsis', '--config.directories.output=' + out];
+  const buildArgs = ['--win', 'nsis', '--publish', 'never', '--config.directories.output=' + out];
   if (opts['electron-dist']) buildArgs.push('--config.electronDist=' + path.resolve(opts['electron-dist']));
   runElectronBuilder(wt, buildArgs);
   const exe = fs.readdirSync(out).find((f) => / Setup .*\.exe$/i.test(f) && !/uninstaller/i.test(f));
@@ -74,7 +84,7 @@ function buildAndVerify(opts, version) {
   const installer = path.join(out, exe);
   const md5 = lib.md5File(installer);
   run('python', ['scripts/release_gate.py', path.join(out, 'win-unpacked', 'resources', 'app.asar'),
-    '--marker', '"version": "' + version + '"', '--absent-marker', opts['absent-marker'] || '"version": "2.11.1"',
+    '--marker', '"version": "' + version + '"', '--absent-marker', absentMarker,
     '--change-card', card, '--review-evidence', evidence, '--json'], { cwd: wt });
   run('python', ['scripts/release_gate.py', installer, '--md5', md5,
     '--change-card', card, '--review-evidence', evidence, '--json'], { cwd: wt });
@@ -103,8 +113,17 @@ if (require.main === module) {
   const opts = lib.parseReleaseArgs(process.argv.slice(2));
   const version = preflight(opts);
   if (!opts.check) {
-    const { out, installer } = buildAndVerify(opts, version);
+    let absentMarker;
+    try {
+      absentMarker = lib.resolveAbsentMarker({
+        version,
+        previousVersion: opts['previous-version'] || resolvePreviousTag(version),
+        explicit: opts['absent-marker']
+      });
+    } catch (e) { console.error(e.message); process.exit(1); }
+    console.log('absent-marker: ' + absentMarker);
+    const { out, installer } = buildAndVerify(opts, version, absentMarker);
     collectMaterials(opts, version, installer, out);
   }
 }
-module.exports = { preflight, buildAndVerify, collectMaterials };
+module.exports = { preflight, buildAndVerify, collectMaterials, resolvePreviousTag };

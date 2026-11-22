@@ -41,6 +41,14 @@ test('findCachedElectron 找到 electron-v45.4.1 zip', () => {
   assert.strictEqual(lib.findCachedElectron('45.4.2', root), null);
 });
 
+test('resolveAbsentMarker 生成旧版本标记并拒绝同值', () => {
+  assert.strictEqual(lib.resolveAbsentMarker({ version: '2.12.0', previousVersion: 'v2.11.1' }), '"version": "2.11.1"');
+  assert.throws(() => lib.resolveAbsentMarker({ version: '2.11.1', previousVersion: '2.11.1' }), /相同/);
+  assert.throws(() => lib.resolveAbsentMarker({
+    version: '2.11.1', previousVersion: '2.11.0', explicit: '"version": "2.11.1"'
+  }), /相同/);
+});
+
 test('runCheck 识别版本不一致与脏工作区', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lw-check-'));
   fs.writeFileSync(path.join(dir, 'VERSION'), '2.11.1\n');
