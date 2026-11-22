@@ -41,11 +41,11 @@ npm start        # 启动应用
 
 > **当前安装包未做代码签名**，Windows SmartScreen 可能显示「未知发布者 / Unknown app」。点「更多信息」→「仍要运行」即可；这是未签名程序的系统提示，不代表安装包损坏。
 
-下载后建议校验 SHA-256（v2.11.1，安装包约 108.6 MiB）：
+下载后建议校验 SHA-256（v2.12.0，安装包 113,866,864 字节，约 108.6 MiB）：
 
 ```powershell
-Get-FileHash .\lightframe-worklog-setup-2.11.1.exe -Algorithm SHA256
-# 期望：172477068C3CEBBE09256BD7268FA5F1DDDB73F199FC70DEAC2D2D0A2BE0F5E3
+Get-FileHash .\lightframe-worklog-setup-2.12.0.exe -Algorithm SHA256
+# 期望：8407731D8B2F88C7725A055B71F0A0BF8B8AC4F49B86019130235A3C397CAB84
 ```
 
 哈希不匹配时不要运行。代码签名方案见 `doc/05-运维/2026-11-21-SignPath代码签名接入.md`（当前暂缓）。
